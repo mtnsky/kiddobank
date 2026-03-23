@@ -1,1 +1,2507 @@
+<!DOCTYPE html>
 
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="KiddoBank">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐷</text></svg>">
+  <title>KiddoBank</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    #root { min-height: 100vh; }
+    #loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(165deg, #f5f5fa 0%, #e8e8f0 40%, #dfe0ea 100%); font-family: inherit; }
+    #loading div { text-align: center; padding: 32px 40px; background: rgba(255,255,255,0.35); backdrop-filter: blur(50px); border-radius: 28px; border: 1px solid rgba(255,255,255,0.5); }
+    #loading p { font-size: 15px; font-weight: 600; color: #8e8e93; margin-top: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading .spinner { width: 36px; height: 36px; border: 3px solid rgba(0,122,255,0.15); border-top-color: #007AFF; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "lucide-react": "https://esm.sh/lucide-react@0.383.0?deps=react@18.2.0"
+    }
+  }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"><div id="loading"><div><div class="spinner"></div><p>Loading KiddoBank...</p></div></div></div>
+  <script type="text/babel" data-type="module">
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Plus, Trash2, ArrowLeft, TrendingUp, TrendingDown, Target, Camera, X, ChevronRight, Edit3, Check, Repeat, PiggyBank, Gift, Church, Coins, Sliders, ArrowUpDown, ChevronUp, ChevronDown, ArrowRightLeft, Gamepad2, Heart, Star, BookOpen, Bike, ShoppingBag, Lock, Unlock, Music, Palette, Settings, Download, Upload } from "lucide-react";
+
+/* ── palette ── */
+const COLORS = [
+{ name: “Sky”, primary: “#007AFF”, light: “rgba(0,122,255,0.08)”, mid: “rgba(0,122,255,0.18)”, accent: “rgba(0,122,255,0.55)”, dark: “#0055CC” },
+{ name: “Rose”, primary: “#FF6F91”, light: “rgba(255,111,145,0.08)”, mid: “rgba(255,111,145,0.18)”, accent: “rgba(255,111,145,0.55)”, dark: “#D94A6E” },
+{ name: “Sage”, primary: “#34C759”, light: “rgba(52,199,89,0.08)”, mid: “rgba(52,199,89,0.18)”, accent: “rgba(52,199,89,0.55)”, dark: “#248A3D” },
+{ name: “Amber”, primary: “#FF9500”, light: “rgba(255,149,0,0.08)”, mid: “rgba(255,149,0,0.18)”, accent: “rgba(255,149,0,0.55)”, dark: “#C77700” },
+{ name: “Violet”, primary: “#AF52DE”, light: “rgba(175,82,222,0.08)”, mid: “rgba(175,82,222,0.18)”, accent: “rgba(175,82,222,0.55)”, dark: “#8944AB” },
+{ name: “Teal”, primary: “#5AC8FA”, light: “rgba(90,200,250,0.08)”, mid: “rgba(90,200,250,0.18)”, accent: “rgba(90,200,250,0.55)”, dark: “#3AA0C8” },
+];
+const FREQ = [“Weekly”, “Monthly”];
+const SCOLORS = [”#007AFF”, “#34C759”, “#FF9500”, “#AF52DE”, “#FF6F91”, “#5AC8FA”];
+const UI = “#007AFF”;
+const UI_LIGHT = “rgba(0,122,255,0.08)”;
+const SPEND_RED = “#D64045”; // lighter withdraw red
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const fmt = (c) => { const a = Math.abs(c); return `${c < 0 ? "-" : ""}$${(a / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
+const fmtDate = (d) => new Date(d).toLocaleDateString(“en-US”, { month: “short”, day: “numeric” });
+const DAYS = [“Sun”, “Mon”, “Tue”, “Wed”, “Thu”, “Fri”, “Sat”];
+const DAYS_FULL = [“Sunday”, “Monday”, “Tuesday”, “Wednesday”, “Thursday”, “Friday”, “Saturday”];
+
+const nxtDate = (freq, day) => {
+const now = new Date();
+if (freq === “Weekly”) {
+const target = day ?? now.getDay();
+const diff = (target - now.getDay() + 7) % 7 || 7;
+const d = new Date(now); d.setDate(d.getDate() + diff);
+return d.toISOString();
+} else {
+const target = day ?? now.getDate();
+let d = new Date(now.getFullYear(), now.getMonth(), target);
+if (d <= now) d = new Date(now.getFullYear(), now.getMonth() + 1, target);
+const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+if (target > lastDay) d.setDate(lastDay);
+return d.toISOString();
+}
+};
+
+async function load() { try { const r = localStorage.getItem(“kiddobank-data”); return r ? JSON.parse(r) : { children: [] }; } catch { return { children: [] }; } }
+async function save(d) { try { localStorage.setItem(“kiddobank-data”, JSON.stringify(d)); } catch (e) { console.error(e); } }
+
+/* ── Liquid Glass tokens (CSS variable based for dark mode) ── */
+const G = {
+glass: { background: “var(–glass-bg)”, backdropFilter: “blur(50px) saturate(200%) brightness(1.05)”, WebkitBackdropFilter: “blur(50px) saturate(200%) brightness(1.05)”, border: “1px solid var(–glass-border)”, boxShadow: “var(–glass-shadow)” },
+card: { background: “var(–card-bg)”, backdropFilter: “blur(40px) saturate(190%)”, WebkitBackdropFilter: “blur(40px) saturate(190%)”, border: “0.5px solid var(–card-border)”, boxShadow: “var(–card-shadow)” },
+solid: { background: “var(–solid-bg)”, backdropFilter: “blur(40px) saturate(180%)”, WebkitBackdropFilter: “blur(40px) saturate(180%)”, border: “0.5px solid var(–solid-border)”, boxShadow: “0 1px 10px rgba(0,0,0,0.04), inset 0 0.5px 0 rgba(255,255,255,0.8)” },
+overlay: { background: “var(–overlay-bg)”, backdropFilter: “blur(60px) saturate(200%) brightness(1.02)”, WebkitBackdropFilter: “blur(60px) saturate(200%) brightness(1.02)” },
+inp: { background: “var(–inp-bg)”, border: “0.5px solid var(–inp-border)”, borderRadius: 14, fontSize: 16, padding: “14px 16px”, fontFamily: “inherit”, outline: “none”, width: “100%”, boxSizing: “border-box”, transition: “border-color 0.25s, box-shadow 0.25s”, color: “var(–text)” },
+};
+const FONT = “-apple-system, ‘SF Pro Display’, ‘SF Pro Text’, ‘Helvetica Neue’, sans-serif”;
+const THEME_VARS_LIGHT = `--bg: linear-gradient(165deg, #f5f5fa 0%, #e8e8f0 40%, #dfe0ea 100%); --text: #1c1c1e; --text2: #3a3a3c; --sub: #8e8e93; --sub2: #aeaeb2; --sub3: #c7c7cc; --glass-bg: rgba(255,255,255,0.35); --glass-border: rgba(255,255,255,0.5); --glass-shadow: 0 4px 24px rgba(0,0,0,0.06), inset 0 0.5px 0 rgba(255,255,255,0.7), inset 0 -0.5px 0 rgba(0,0,0,0.04); --card-bg: rgba(255,255,255,0.42); --card-border: rgba(255,255,255,0.55); --card-shadow: 0 2px 16px rgba(0,0,0,0.05), inset 0 0.5px 0 rgba(255,255,255,0.65); --solid-bg: rgba(255,255,255,0.6); --solid-border: rgba(255,255,255,0.7); --overlay-bg: rgba(245,245,250,0.72); --inp-bg: rgba(120,120,128,0.05); --inp-border: rgba(120,120,128,0.12); --empty-bg: rgba(120,120,128,0.06);`;
+const THEME_VARS_DARK = `--bg: linear-gradient(165deg, #1a1a2e 0%, #16162a 40%, #111126 100%); --text: #f5f5f7; --text2: #d1d1d6; --sub: #98989d; --sub2: #6c6c70; --sub3: #48484a; --glass-bg: rgba(44,44,50,0.55); --glass-border: rgba(255,255,255,0.1); --glass-shadow: 0 4px 24px rgba(0,0,0,0.2), inset 0 0.5px 0 rgba(255,255,255,0.08); --card-bg: rgba(44,44,50,0.5); --card-border: rgba(255,255,255,0.08); --card-shadow: 0 2px 16px rgba(0,0,0,0.15), inset 0 0.5px 0 rgba(255,255,255,0.06); --solid-bg: rgba(50,50,56,0.6); --solid-border: rgba(255,255,255,0.1); --overlay-bg: rgba(28,28,32,0.85); --inp-bg: rgba(255,255,255,0.06); --inp-border: rgba(255,255,255,0.1); --empty-bg: rgba(255,255,255,0.05);`;
+const LG_CSS = `
+@keyframes glassIn { from { opacity: 0; transform: translateY(20px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes confettiFall { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+@keyframes celebPop { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+
+- { -webkit-tap-highlight-color: transparent; }
+  `;
+
+/* ══ shared components ══ */
+function Avatar({ child, size = 48 }) {
+const s = { width: size, height: size, borderRadius: “50%”, flexShrink: 0, overflow: “hidden” };
+if (child.photo) return <img src={child.photo} alt={child.name} style={{ …s, objectFit: “cover” }} />;
+const cl = COLORS.find(x => x.name === child.color) || COLORS[0];
+return <div style={{ …s, background: `linear-gradient(145deg, ${cl.primary}, ${cl.dark})`, display: “flex”, alignItems: “center”, justifyContent: “center”, color: “#fff”, fontSize: size * 0.38, fontWeight: 700, letterSpacing: 0.5 }}>{child.name?.charAt(0)?.toUpperCase() || “?”}</div>;
+}
+
+function Modal({ open, onClose, title, children }) {
+if (!open) return null;
+return (
+<div style={{ position: “fixed”, inset: 0, zIndex: 200, display: “flex”, alignItems: “flex-end”, justifyContent: “center” }}>
+<style>{LG_CSS}</style>
+<div style={{ position: “absolute”, inset: 0, background: “rgba(0,0,0,0.18)”, backdropFilter: “blur(12px) saturate(140%)”, WebkitBackdropFilter: “blur(12px) saturate(140%)”, animation: “fadeIn 0.2s ease” }} onClick={onClose} />
+<div style={{ position: “relative”, …G.overlay, borderRadius: “28px 28px 0 0”, width: “100%”, maxWidth: 480, maxHeight: “88vh”, overflow: “auto”, padding: “16px 22px 38px”, borderTop: “0.5px solid rgba(255,255,255,0.8)”, boxShadow: “0 -8px 40px rgba(0,0,0,0.08), inset 0 0.5px 0 rgba(255,255,255,0.9)”, animation: “sheetUp 0.35s cubic-bezier(0.32, 0.72, 0, 1)” }}>
+<div style={{ width: 40, height: 5, borderRadius: 3, background: “rgba(0,0,0,0.1)”, margin: “0 auto 18px” }} />
+<div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, marginBottom: 20 }}>
+<h3 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: “var(–text)”, letterSpacing: -0.3 }}>{title}</h3>
+<button onClick={onClose} style={{ …G.glass, borderRadius: 20, width: 34, height: 34, display: “flex”, alignItems: “center”, justifyContent: “center”, cursor: “pointer”, padding: 0 }}><X size={15} color="var(--sub)" /></button>
+</div>
+{children}
+</div>
+</div>
+);
+}
+
+function Field({ label, value, onChange, type = “text”, placeholder, prefix, error, onClear }) {
+const inputRef = useRef(null);
+return (
+<div style={{ marginBottom: 14 }}>
+{label && <label style={{ display: “block”, fontSize: 13, fontWeight: 600, color: “var(–sub)”, marginBottom: 5, letterSpacing: -0.1 }}>{label}</label>}
+<div style={{ position: “relative” }}>
+{prefix && <span style={{ position: “absolute”, left: 12, top: “50%”, transform: “translateY(-50%)”, color: “var(–sub)”, fontSize: 16, fontWeight: 600 }}>{prefix}</span>}
+<input ref={inputRef} type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+style={{ …G.inp, paddingLeft: prefix ? 28 : 14, paddingRight: onClear && value ? 38 : 14, borderColor: error ? “rgba(214,64,69,0.5)” : undefined }}
+onFocus={e => { e.target.style.borderColor = error ? “rgba(214,64,69,0.5)” : “rgba(0,122,255,0.4)”; e.target.style.boxShadow = `0 0 0 3px ${error ? "rgba(214,64,69,0.1)" : "rgba(0,122,255,0.1)"}`; }}
+onBlur={e => { e.target.style.borderColor = error ? “rgba(214,64,69,0.5)” : “rgba(120,120,128,0.15)”; e.target.style.boxShadow = “none”; }}
+/>
+{onClear && value ? (
+<button
+onTouchStart={e => { e.preventDefault(); onClear(); inputRef.current?.focus(); }}
+onMouseDown={e => { e.preventDefault(); onClear(); inputRef.current?.focus(); }}
+style={{ position: “absolute”, right: 8, top: “50%”, transform: “translateY(-50%)”, background: “rgba(120,120,128,0.12)”, border: “none”, borderRadius: 10, width: 20, height: 20, display: “flex”, alignItems: “center”, justifyContent: “center”, cursor: “pointer”, padding: 0 }}>
+<X size={11} color="var(--sub)" />
+</button>
+) : null}
+</div>
+{error && <p style={{ color: “#D64045”, fontSize: 12, fontWeight: 600, margin: “4px 0 0” }}>{error}</p>}
+</div>
+);
+}
+
+function MoneyField({ label, cents, onChange, error }) {
+const display = `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const ref = useRef(null);
+const handleKey = (e) => {
+if (e.key === “Backspace” || e.key === “Delete”) { e.preventDefault(); onChange(Math.floor(cents / 10)); }
+else if (e.key >= “0” && e.key <= “9”) { e.preventDefault(); const n = cents * 10 + parseInt(e.key); if (n <= 9999999) onChange(n); }
+};
+const handleInput = (e) => {
+const d = e.nativeEvent?.data;
+if (e.nativeEvent?.inputType === “deleteContentBackward”) onChange(Math.floor(cents / 10));
+else if (d >= “0” && d <= “9”) { const n = cents * 10 + parseInt(d); if (n <= 9999999) onChange(n); }
+};
+return (
+<div style={{ marginBottom: 14 }} onClick={() => ref.current?.focus()}>
+{label && <label style={{ display: “block”, fontSize: 13, fontWeight: 600, color: “var(–sub)”, marginBottom: 5 }}>{label}</label>}
+<div style={{ …G.inp, display: “flex”, alignItems: “center”, position: “relative”, cursor: “text”, borderColor: error ? “rgba(214,64,69,0.5)” : undefined }}>
+<span style={{ fontSize: 20, fontWeight: 700, color: cents > 0 ? “var(–text)” : “var(–sub3)”, letterSpacing: -0.3 }}>{display}</span>
+<input ref={ref} type=“tel” inputMode=“numeric” value=”” onChange={() => {}} onInput={handleInput} onKeyDown={handleKey}
+style={{ position: “absolute”, inset: 0, opacity: 0, fontSize: 16 }}
+onFocus={e => { e.target.parentElement.style.borderColor = “rgba(0,122,255,0.4)”; e.target.parentElement.style.boxShadow = “0 0 0 3px rgba(0,122,255,0.1)”; }}
+onBlur={e => { e.target.parentElement.style.borderColor = error ? “rgba(214,64,69,0.5)” : “rgba(120,120,128,0.15)”; e.target.parentElement.style.boxShadow = “none”; }}
+/>
+</div>
+{error && <p style={{ color: “#D64045”, fontSize: 12, fontWeight: 600, margin: “4px 0 0” }}>{error}</p>}
+</div>
+);
+}
+
+/* ── Bank-style rate input (one decimal: typing 4,5 = 4.5%) ── */
+function RateField({ label, tenths, onChange, suffix }) {
+const ref = useRef(null);
+const display = `${(tenths / 10).toFixed(1)}`;
+const handleKey = (e) => {
+if (e.key === “Backspace” || e.key === “Delete”) { e.preventDefault(); onChange(Math.floor(tenths / 10)); }
+else if (e.key >= “0” && e.key <= “9”) { e.preventDefault(); const n = tenths * 10 + parseInt(e.key); if (n <= 9999) onChange(n); }
+};
+const handleInput = (e) => {
+const d = e.nativeEvent?.data;
+if (e.nativeEvent?.inputType === “deleteContentBackward”) onChange(Math.floor(tenths / 10));
+else if (d >= “0” && d <= “9”) { const n = tenths * 10 + parseInt(d); if (n <= 9999) onChange(n); }
+};
+return (
+<div style={{ marginBottom: 14 }} onClick={() => ref.current?.focus()}>
+{label && <label style={{ display: “block”, fontSize: 13, fontWeight: 600, color: “var(–sub)”, marginBottom: 5 }}>{label}</label>}
+<div style={{ …G.inp, display: “flex”, alignItems: “center”, justifyContent: “space-between”, position: “relative”, cursor: “text” }}>
+<span style={{ fontSize: 20, fontWeight: 700, color: tenths > 0 ? “var(–text)” : “var(–sub3)”, letterSpacing: -0.3 }}>{display}</span>
+<span style={{ color: “var(–sub)”, fontSize: 13, fontWeight: 600 }}>% {suffix || “”}</span>
+<input ref={ref} type=“tel” inputMode=“numeric” value=”” onChange={() => {}} onInput={handleInput} onKeyDown={handleKey}
+style={{ position: “absolute”, inset: 0, opacity: 0, fontSize: 16 }}
+onFocus={e => { e.target.parentElement.style.borderColor = “rgba(175,82,222,0.4)”; e.target.parentElement.style.boxShadow = “0 0 0 3px rgba(175,82,222,0.1)”; }}
+onBlur={e => { e.target.parentElement.style.borderColor = “rgba(120,120,128,0.12)”; e.target.parentElement.style.boxShadow = “none”; }}
+/>
+</div>
+</div>
+);
+}
+
+const ICON_LIST = [
+{ key: “spending”, Icon: Coins, label: “Spending” },
+{ key: “savings”, Icon: PiggyBank, label: “Savings” },
+{ key: “giving”, Icon: Heart, label: “Giving” },
+{ key: “goal”, Icon: Star, label: “Big Goal” },
+{ key: “toys”, Icon: Gamepad2, label: “Toys & Games” },
+{ key: “books”, Icon: BookOpen, label: “Books” },
+{ key: “activities”, Icon: Bike, label: “Activities” },
+{ key: “clothes”, Icon: ShoppingBag, label: “Clothes” },
+{ key: “music”, Icon: Music, label: “Music” },
+{ key: “art”, Icon: Palette, label: “Art & Crafts” },
+];
+const getBI = (key) => (ICON_LIST.find(o => o.key === key) || ICON_LIST[0]).Icon;
+
+function IconPicker({ value, onChange, color, onSelect }) {
+return (
+<div style={{ marginBottom: 14 }}>
+<label style={{ display: “block”, fontSize: 13, fontWeight: 600, color: “var(–sub)”, marginBottom: 6 }}>Category</label>
+<div style={{ display: “grid”, gridTemplateColumns: “repeat(5, 1fr)”, gap: 6 }}>
+{ICON_LIST.map(({ key, Icon, label }) => (
+<button key={key} onClick={() => { onChange(key); if (onSelect) onSelect(label); }} style={{
+display: “flex”, flexDirection: “column”, alignItems: “center”, gap: 4, padding: “8px 4px”, borderRadius: 12, border: “none”, cursor: “pointer”, fontFamily: “inherit”, transition: “all 0.2s”,
+background: value === key ? color.light : “rgba(120,120,128,0.06)”,
+}}>
+<Icon size={20} color={value === key ? color.primary : “var(–sub)”} />
+<span style={{ fontSize: 9, fontWeight: 600, color: value === key ? color.primary : “var(–sub)”, lineHeight: 1.2, textAlign: “center” }}>{label}</span>
+</button>
+))}
+</div>
+</div>
+);
+}
+
+function Pill({ selected, onClick, children, color = “#007AFF” }) {
+return (
+<button onClick={onClick} style={{
+padding: “9px 18px”, borderRadius: 100, border: selected ? “none” : “0.5px solid rgba(120,120,128,0.12)”, fontSize: 14, fontWeight: 600, fontFamily: “inherit”, cursor: “pointer”,
+transition: “all 0.25s cubic-bezier(0.32, 0.72, 0, 1)”,
+background: selected ? color : “rgba(255,255,255,0.35)”, color: selected ? “#fff” : “var(–text2)”,
+backdropFilter: selected ? “none” : “blur(20px) saturate(150%)”, WebkitBackdropFilter: selected ? “none” : “blur(20px) saturate(150%)”,
+boxShadow: selected ? `0 3px 12px ${color}40, inset 0 0.5px 0 rgba(255,255,255,0.25)` : “0 1px 4px rgba(0,0,0,0.04), inset 0 0.5px 0 rgba(255,255,255,0.5)”,
+display: “flex”, alignItems: “center”, gap: 5,
+}}>{children}</button>
+);
+}
+
+function Btn({ children, onClick, color = “#007AFF”, variant = “filled”, disabled, full, style: sx }) {
+const f = variant === “filled”;
+return (
+<button onClick={onClick} disabled={disabled} style={{
+padding: “14px 24px”, borderRadius: 100, border: f ? “0.5px solid rgba(255,255,255,0.2)” : `1.5px solid ${color}`,
+background: f ? color : “rgba(255,255,255,0.35)”, color: f ? “#fff” : color,
+backdropFilter: f ? “none” : “blur(20px) saturate(150%)”, WebkitBackdropFilter: f ? “none” : “blur(20px) saturate(150%)”,
+fontSize: 16, fontWeight: 700, fontFamily: “inherit”, cursor: disabled ? “not-allowed” : “pointer”,
+opacity: disabled ? 0.35 : 1, display: “flex”, alignItems: “center”, justifyContent: “center”, gap: 8,
+width: full ? “100%” : “auto”, transition: “all 0.25s cubic-bezier(0.32, 0.72, 0, 1)”,
+boxShadow: f && !disabled ? `0 4px 16px ${color}30, inset 0 0.5px 0 rgba(255,255,255,0.25)` : “0 1px 4px rgba(0,0,0,0.04)”, …sx
+}}>{children}</button>
+);
+}
+
+/* ── Image Cropper (canvas-rendered, refs for drag state) ── */
+function ImageCropper({ src, onCrop, onCancel }) {
+const cvRef = useRef(null);
+const outRef = useRef(null);
+const imgRef = useRef(null);
+const S = useRef({ ox: 0, oy: 0, z: 1, drag: false, sx: 0, sy: 0, sox: 0, soy: 0, iw: 1, ih: 1, minZ: 1 });
+const [ready, setReady] = useState(false);
+const [zVal, setZVal] = useState(1);
+const DIM = Math.min(280, typeof window !== “undefined” ? window.innerWidth - 64 : 280);
+
+const paint = useCallback(() => {
+const cv = cvRef.current; if (!cv || !imgRef.current) return;
+const ctx = cv.getContext(“2d”); const s = S.current;
+ctx.clearRect(0, 0, DIM, DIM);
+ctx.drawImage(imgRef.current, s.ox, s.oy, s.iw * s.z, s.ih * s.z);
+ctx.save(); ctx.fillStyle = “rgba(0,0,0,0.5)”;
+ctx.beginPath(); ctx.rect(0, 0, DIM, DIM); ctx.arc(DIM / 2, DIM / 2, DIM / 2, 0, Math.PI * 2, true); ctx.fill(); ctx.restore();
+ctx.beginPath(); ctx.arc(DIM / 2, DIM / 2, DIM / 2 - 1, 0, Math.PI * 2);
+ctx.strokeStyle = “rgba(255,255,255,0.45)”; ctx.lineWidth = 2; ctx.stroke();
+}, [DIM]);
+
+useEffect(() => {
+const img = new Image();
+img.onload = () => {
+imgRef.current = img; const s = S.current;
+s.iw = img.naturalWidth; s.ih = img.naturalHeight;
+s.minZ = DIM / Math.min(s.iw, s.ih); s.z = s.minZ;
+s.ox = (DIM - s.iw * s.z) / 2; s.oy = (DIM - s.ih * s.z) / 2;
+setZVal(s.z); setReady(true); paint();
+};
+img.src = src;
+}, [src, DIM, paint]);
+
+const xy = (e) => {
+const r = cvRef.current?.getBoundingClientRect(); if (!r) return [0, 0];
+const t = e.changedTouches ? e.changedTouches[0] : e;
+return [t.clientX - r.left, t.clientY - r.top];
+};
+
+const down = (e) => { e.preventDefault(); const [x, y] = xy(e); const s = S.current; s.drag = true; s.sx = x; s.sy = y; s.sox = s.ox; s.soy = s.oy; };
+const move = (e) => { e.preventDefault(); const s = S.current; if (!s.drag) return; const [x, y] = xy(e); s.ox = s.sox + (x - s.sx); s.oy = s.soy + (y - s.sy); paint(); };
+const up = (e) => { if (e) e.preventDefault(); S.current.drag = false; };
+
+const onZoom = (e) => {
+const nz = parseFloat(e.target.value); const s = S.current; const cx = DIM / 2;
+const rx = (cx - s.ox) / s.z; const ry = (cx - s.oy) / s.z;
+s.z = nz; s.ox = cx - rx * nz; s.oy = cx - ry * nz;
+setZVal(nz); paint();
+};
+
+const crop = () => {
+const cv = outRef.current; if (!cv || !imgRef.current) return;
+const O = 400; cv.width = O; cv.height = O;
+const ctx = cv.getContext(“2d”);
+ctx.beginPath(); ctx.arc(O / 2, O / 2, O / 2, 0, Math.PI * 2); ctx.clip();
+const s = S.current; const k = O / DIM;
+ctx.drawImage(imgRef.current, s.ox * k, s.oy * k, s.iw * s.z * k, s.ih * s.z * k);
+onCrop(cv.toDataURL(“image/jpeg”, 0.9));
+};
+
+return (
+<div style={{ position: “fixed”, inset: 0, zIndex: 300, display: “flex”, alignItems: “center”, justifyContent: “center”, flexDirection: “column”, background: “rgba(0,0,0,0.88)” }}>
+<p style={{ color: “#fff”, fontSize: 18, fontWeight: 700, margin: “0 0 18px” }}>Move and Scale</p>
+<canvas ref={cvRef} width={DIM} height={DIM}
+style={{ touchAction: “none”, cursor: “grab”, borderRadius: 4 }}
+onMouseDown={down} onMouseMove={move} onMouseUp={up} onMouseLeave={up}
+onTouchStart={down} onTouchMove={move} onTouchEnd={up}
+/>
+{ready && (
+<div style={{ display: “flex”, alignItems: “center”, gap: 14, width: DIM, marginTop: 22 }}>
+<span style={{ color: “rgba(255,255,255,0.4)”, fontSize: 20, fontWeight: 700, lineHeight: 1 }}>−</span>
+<input type=“range” min={S.current.minZ} max={S.current.minZ * 4} step={0.002} value={zVal} onChange={onZoom}
+style={{ flex: 1, accentColor: “#007AFF” }} />
+<span style={{ color: “rgba(255,255,255,0.4)”, fontSize: 20, fontWeight: 700, lineHeight: 1 }}>+</span>
+</div>
+)}
+<div style={{ display: “flex”, gap: 14, marginTop: 24 }}>
+<Btn onClick={onCancel} variant=“outline” color=“rgba(255,255,255,0.5)” style={{ color: “#fff”, borderColor: “rgba(255,255,255,0.25)” }}>Cancel</Btn>
+<Btn onClick={crop} color="#007AFF">Choose</Btn>
+</div>
+<canvas ref={outRef} style={{ display: “none” }} />
+</div>
+);
+}
+
+/* ── Floating glass action bar ── */
+function ActionBar({ onAdd, onSpend, onTransfer }) {
+return (
+<div style={{ …G.glass, borderRadius: 100, padding: 5, display: “flex”, gap: 5, marginBottom: 24 }}>
+<button onClick={onAdd} style={{ flex: 1, padding: “13px 10px”, borderRadius: 100, border: “none”, background: “rgba(52,199,89,0.15)”, color: “#34C759”, fontSize: 15, fontWeight: 700, fontFamily: “inherit”, cursor: “pointer”, display: “flex”, alignItems: “center”, justifyContent: “center”, gap: 6, transition: “all 0.2s” }}>
+<TrendingUp size={15} /> Deposit
+</button>
+<button onClick={onSpend} style={{ flex: 1, padding: “13px 10px”, borderRadius: 100, border: “none”, background: “rgba(214,64,69,0.12)”, color: “#D64045”, fontSize: 15, fontWeight: 700, fontFamily: “inherit”, cursor: “pointer”, display: “flex”, alignItems: “center”, justifyContent: “center”, gap: 6, transition: “all 0.2s” }}>
+<TrendingDown size={15} /> Withdraw
+</button>
+<button onClick={onTransfer} style={{ flex: 1, padding: “13px 10px”, borderRadius: 100, border: “none”, background: “rgba(255,149,0,0.12)”, color: “#FF9500”, fontSize: 15, fontWeight: 700, fontFamily: “inherit”, cursor: “pointer”, display: “flex”, alignItems: “center”, justifyContent: “center”, gap: 6, transition: “all 0.2s” }}>
+<ArrowRightLeft size={15} /> Transfer
+</button>
+</div>
+);
+}
+
+/* ── Transaction list ── */
+function TxList({ transactions, buckets, color, emptyMsg, onEdit, deletedBuckets }) {
+if (!transactions || transactions.length === 0) {
+return <div style={{ …G.card, borderRadius: 22, padding: 24, textAlign: “center”, color: “var(–sub2)”, fontSize: 14 }}>{emptyMsg || “No transactions yet.”}</div>;
+}
+const balMap = {};
+const running = {};
+(buckets || []).forEach(b => { running[b.id] = b.allocated || 0; });
+for (const t of transactions) {
+if (t.bucketId && running[t.bucketId] !== undefined) {
+balMap[t.id] = running[t.bucketId];
+running[t.bucketId] -= t.amount;
+}
+}
+const del = deletedBuckets || {};
+return (
+<div style={{ …G.card, borderRadius: 22, overflow: “hidden” }}>
+{transactions.map((t, i) => {
+const pos = t.amount > 0;
+const isXfer = t.type === “transfer”;
+const isInterest = t.type === “interest”;
+const bkt = t.bucketId ? (buckets || []).find(b => b.id === t.bucketId) : null;
+const deletedName = !bkt && t.bucketId && del[t.bucketId] ? del[t.bucketId] : null;
+const iconBg = isInterest ? “rgba(175,82,222,0.1)” : isXfer ? “rgba(255,149,0,0.1)” : pos ? “rgba(52,199,89,0.1)” : “rgba(214,64,69,0.1)”;
+const iconColor = isInterest ? “#AF52DE” : isXfer ? “#FF9500” : pos ? “#34C759” : “#D64045”;
+const Icon = isInterest ? TrendingUp : isXfer ? ArrowRightLeft : pos ? TrendingUp : TrendingDown;
+const snapBal = balMap[t.id];
+const bktLabel = bkt ? bkt.name : deletedName ? `${deletedName} (Deleted)` : null;
+return (
+<div key={t.id} onClick={() => onEdit && onEdit(t)} style={{ display: “flex”, alignItems: “center”, gap: 12, padding: “11px 16px”, borderTop: i > 0 ? “0.5px solid rgba(120,120,128,0.06)” : “none”, cursor: onEdit ? “pointer” : “default”, transition: “background 0.15s” }}
+onMouseEnter={e => { if (onEdit) e.currentTarget.style.background = “rgba(0,0,0,0.02)”; }}
+onMouseLeave={e => { e.currentTarget.style.background = “transparent”; }}
+>
+<div style={{ width: 36, height: 36, borderRadius: 12, background: iconBg, display: “flex”, alignItems: “center”, justifyContent: “center”, flexShrink: 0 }}>
+<Icon size={15} color={iconColor} />
+</div>
+<div style={{ flex: 1, minWidth: 0 }}>
+<div style={{ display: “flex”, alignItems: “center”, gap: 5 }}>
+<span style={{ fontSize: 15, fontWeight: 600, color: “var(–text)”, overflow: “hidden”, textOverflow: “ellipsis”, whiteSpace: “nowrap” }}>{t.description}</span>
+{t.autoSplit && <span style={{ fontSize: 9, fontWeight: 700, color: color.primary, background: color.light, padding: “1px 5px”, borderRadius: 4, flexShrink: 0 }}>SPLIT</span>}
+{isInterest && <span style={{ fontSize: 9, fontWeight: 700, color: “#AF52DE”, background: “rgba(175,82,222,0.1)”, padding: “1px 5px”, borderRadius: 4, flexShrink: 0 }}>INTEREST</span>}
+</div>
+<div style={{ fontSize: 12, color: “var(–sub)” }}>
+{fmtDate(t.date)}{bktLabel ? ` \u00B7 ${bktLabel}` : “”}
+{deletedName && <span style={{ color: “var(–sub2)”, fontStyle: “italic” }}></span>}
+</div>
+</div>
+<div style={{ textAlign: “right”, flexShrink: 0 }}>
+<div style={{ fontSize: 16, fontWeight: 700, color: isInterest ? “#AF52DE” : isXfer ? “#FF9500” : pos ? “#34C759” : “#D64045” }}>
+{pos && !isXfer ? “+” : “”}{fmt(t.amount)}
+</div>
+{snapBal !== undefined && <div style={{ fontSize: 11, color: “var(–sub2)”, marginTop: 1 }}>{fmt(snapBal)}</div>}
+</div>
+</div>
+);
+})}
+</div>
+);
+}
+
+/* ── split preview & config ── */
+function SplitPreview({ amountCents, buckets, color }) {
+if (!amountCents || amountCents <= 0) return null;
+const total = buckets.reduce((s, b) => s + (b.splitPercent || 0), 0);
+if (total !== 100) return null;
+const bws = buckets.filter(b => (b.splitPercent || 0) > 0);
+let rem = amountCents;
+const sp = bws.map((b, i) => { const last = i === bws.length - 1; const sh = last ? rem : Math.round(amountCents * (b.splitPercent / 100)); rem -= sh; return { …b, share: sh, bc: SCOLORS[i % SCOLORS.length] }; });
+return (
+<div style={{ …G.solid, borderRadius: 16, padding: 14, marginBottom: 14 }}>
+<div style={{ display: “flex”, alignItems: “center”, gap: 6, marginBottom: 10 }}>
+<Sliders size={13} color={color.primary} />
+<span style={{ fontSize: 12, fontWeight: 700, color: color.primary, letterSpacing: 0.3 }}>SPLIT PREVIEW</span>
+</div>
+<div style={{ borderRadius: 5, overflow: “hidden”, height: 6, display: “flex”, background: “rgba(120,120,128,0.08)”, marginBottom: 10 }}>
+{sp.map(s => <div key={s.id} style={{ width: `${s.splitPercent}%`, height: “100%”, background: s.bc, transition: “width 0.3s” }} />)}
+</div>
+{sp.map(s => (
+<div key={s.id} style={{ display: “flex”, justifyContent: “space-between”, padding: “4px 0” }}>
+<div style={{ display: “flex”, alignItems: “center”, gap: 8 }}>
+<div style={{ width: 7, height: 7, borderRadius: 4, background: s.bc }} />
+<span style={{ fontSize: 14, fontWeight: 600, color: “var(–text2)” }}>{s.name}</span>
+<span style={{ fontSize: 12, color: “var(–sub)” }}>{s.splitPercent}%</span>
+</div>
+<span style={{ fontSize: 15, fontWeight: 700, color: “var(–text)” }}>{fmt(s.share)}</span>
+</div>
+))}
+</div>
+);
+}
+
+function SplitConfig({ buckets, edits, setEdits, color, amountCents = 0, splitMode = “pct”, setSplitMode }) {
+const included = (buckets || []).filter(b => edits[b.id] !== undefined);
+const available = (buckets || []).filter(b => edits[b.id] === undefined);
+const total = Object.values(edits).reduce((s, v) => s + (parseInt(v) || 0), 0);
+const over = total > 100;
+const under = total > 0 && total < 100;
+const isPct = splitMode === “pct”;
+
+const handlePctChange = (bid, val) => setEdits(p => ({ …p, [bid]: val }));
+const handleDollarChange = (bid, centsVal) => {
+if (amountCents <= 0) return;
+const pct = Math.round((centsVal / amountCents) * 100);
+setEdits(p => ({ …p, [bid]: pct.toString() }));
+};
+const addBucket = (bid) => { if (bid) setEdits(p => ({ …p, [bid]: “0” })); };
+const removeBucket = (bid) => setEdits(p => { const n = { …p }; delete n[bid]; return n; });
+
+const selectStyle = { …G.inp, width: “100%”, fontSize: 14, fontWeight: 600, color: “var(–text)”, fontFamily: FONT, appearance: “none”, WebkitAppearance: “none”, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: “no-repeat”, backgroundPosition: “right 10px center”, paddingRight: 28, cursor: “pointer”, padding: “8px 28px 8px 10px” };
+
+return (
+<div style={{ marginBottom: 14 }}>
+<div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, marginBottom: 10 }}>
+<span style={{ fontSize: 13, fontWeight: 600, color: “var(–sub)” }}>Split Allocation</span>
+<span style={{ fontSize: 12, fontWeight: 700, color: over ? “#D64045” : total === 100 ? “#34C759” : under ? “#FF9500” : “var(–sub)” }}>{total}%</span>
+</div>
+{included.length > 0 && (
+<div style={{ borderRadius: 4, overflow: “hidden”, height: 6, display: “flex”, background: “rgba(120,120,128,0.08)”, marginBottom: 10 }}>
+{included.map((b, i) => { const v = parseInt(edits[b.id]) || 0; return v > 0 ? <div key={b.id} style={{ width: `${Math.min(v, 100)}%`, height: “100%”, background: SCOLORS[i % SCOLORS.length], transition: “width 0.3s” }} /> : null; })}
+</div>
+)}
+<div style={{ display: “flex”, flexDirection: “column”, gap: 6 }}>
+{included.map((b, i) => {
+const pctVal = edits[b.id] || “0”;
+const pctNum = parseInt(pctVal) || 0;
+const dollarCents = amountCents > 0 ? Math.round(amountCents * pctNum / 100) : 0;
+const showPreview = pctNum > 0 && amountCents > 0;
+return (
+<div key={b.id} style={{ …G.card, borderRadius: 14, padding: “10px 12px”, border: pctNum > 0 ? `2px solid ${SCOLORS[i % SCOLORS.length]}40` : “2px solid transparent”, transition: “all 0.2s” }}>
+<div style={{ display: “flex”, alignItems: “center”, gap: 8 }}>
+<div style={{ width: 8, height: 8, borderRadius: 4, background: SCOLORS[i % SCOLORS.length], flexShrink: 0 }} />
+<span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: “var(–text)”, minWidth: 0, overflow: “hidden”, textOverflow: “ellipsis”, whiteSpace: “nowrap” }}>{b.name}</span>
+<span style={{ fontSize: 12, color: “var(–sub)”, flexShrink: 0 }}>{fmt(b.allocated || 0)}</span>
+<button onClick={() => removeBucket(b.id)} style={{ background: “none”, border: “none”, cursor: “pointer”, padding: 2, display: “flex”, flexShrink: 0 }}><X size={14} color="var(--sub3)" /></button>
+</div>
+<div style={{ display: “flex”, alignItems: “center”, gap: 6, marginTop: 8 }}>
+{isPct ? (
+<div style={{ position: “relative”, width: 68 }}>
+<input type=“number” value={pctVal === “0” ? “” : pctVal} onChange={e => handlePctChange(b.id, e.target.value)} placeholder=“0”
+style={{ …G.inp, padding: “8px 24px 8px 8px”, textAlign: “right”, fontSize: 16, width: “100%”, borderColor: `${color.primary}33`, color: pctNum > 0 ? “var(–text)” : “var(–sub3)” }}
+onFocus={e => { e.target.style.borderColor = `${color.primary}66`; e.target.style.boxShadow = `0 0 0 3px ${color.primary}15`; e.target.style.color = “var(–text)”; }}
+onBlur={e => { e.target.style.borderColor = `${color.primary}33`; e.target.style.boxShadow = “none”; const cv = edits[b.id]; if (!cv || cv === “”) setEdits(p => ({ …p, [b.id]: “0” })); e.target.style.color = (parseInt(edits[b.id]) || 0) > 0 ? “var(–text)” : “var(–sub3)”; }}
+/>
+<span style={{ position: “absolute”, right: 8, top: “50%”, transform: “translateY(-50%)”, color: “var(–sub)”, fontSize: 12, fontWeight: 700, pointerEvents: “none” }}>%</span>
+</div>
+) : (
+<button onClick={() => setSplitMode && setSplitMode(“pct”)}
+style={{ padding: “8px 10px”, borderRadius: 12, border: “1px dashed rgba(120,120,128,0.2)”, background: “transparent”, fontSize: 14, fontWeight: 600, color: pctNum > 0 ? “var(–text2)” : “var(–sub3)”, cursor: “pointer”, fontFamily: “inherit”, minWidth: 58, textAlign: “right” }}>
+{pctNum > 0 ? `${pctNum}%` : “0%”}
+</button>
+)}
+{!isPct ? (
+<DollarSplitInput cents={dollarCents} amountCents={amountCents} onChange={c => handleDollarChange(b.id, c)} color={color} />
+) : (
+<button onClick={() => setSplitMode && setSplitMode(“dollar”)}
+style={{ padding: “8px 10px”, borderRadius: 12, border: “1px dashed rgba(120,120,128,0.2)”, background: “transparent”, fontSize: 14, fontWeight: 600, color: dollarCents > 0 ? “var(–text2)” : “var(–sub3)”, cursor: “pointer”, fontFamily: “inherit”, minWidth: 72, textAlign: “right” }}>
+{amountCents > 0 && pctNum > 0 ? fmt(dollarCents) : “$0.00”}
+</button>
+)}
+{showPreview && (
+<div style={{ display: “flex”, alignItems: “center”, gap: 5, marginLeft: “auto”, flexShrink: 0 }}>
+<span style={{ fontSize: 11, fontWeight: 700, color: “#34C759” }}>+ {fmt(dollarCents)}</span>
+<span style={{ fontSize: 10, color: “var(–sub2)” }}>=</span>
+<span style={{ fontSize: 12, fontWeight: 700, color: “var(–text2)” }}>{fmt((b.allocated || 0) + dollarCents)}</span>
+</div>
+)}
+</div>
+</div>
+);
+})}
+</div>
+{available.length > 0 && (
+<div style={{ marginTop: 8 }}>
+<select value=”” onChange={e => addBucket(e.target.value)} style={selectStyle}>
+<option value="">+ Add bucket…</option>
+{available.map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+</select>
+</div>
+)}
+{over && <p style={{ color: “#D64045”, fontSize: 12, fontWeight: 600, margin: “8px 0 0”, textAlign: “center” }}>Total exceeds 100%</p>}
+{under && <p style={{ color: “#FF9500”, fontSize: 12, fontWeight: 600, margin: “8px 0 0”, textAlign: “center” }}>{100 - total}% remaining to distribute</p>}
+</div>
+);
+}
+
+function DollarSplitInput({ cents, amountCents, onChange, color }) {
+const inputRef = useRef(null);
+const focused = useRef(false);
+const [raw, setRaw] = useState(cents);
+useEffect(() => { if (!focused.current) setRaw(cents); }, [cents]);
+const display = `$${(raw / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const commit = (n) => { setRaw(n); onChange(n); };
+const handleKey = (e) => {
+if (e.key === “Backspace” || e.key === “Delete”) { e.preventDefault(); commit(Math.floor(raw / 10)); }
+else if (e.key >= “0” && e.key <= “9”) { e.preventDefault(); const n = raw * 10 + parseInt(e.key); if (n <= (amountCents || 9999999) * 2) commit(n); }
+};
+const handleInput = (e) => {
+const d = e.nativeEvent?.data;
+if (e.nativeEvent?.inputType === “deleteContentBackward”) commit(Math.floor(raw / 10));
+else if (d >= “0” && d <= “9”) { const n = raw * 10 + parseInt(d); if (n <= (amountCents || 9999999) * 2) commit(n); }
+};
+return (
+<div style={{ position: “relative”, width: 80 }} onClick={() => inputRef.current?.focus()}>
+<div style={{ …G.inp, padding: “8px 8px”, textAlign: “right”, fontSize: 16, cursor: “text”, borderColor: “rgba(120,120,128,0.2)” }}>
+<span style={{ fontWeight: 600, color: raw > 0 ? “var(–text)” : “var(–sub3)”, fontSize: 15 }}>{display}</span>
+</div>
+<input ref={inputRef} type=“tel” inputMode=“numeric” value=”” onChange={() => {}} onInput={handleInput} onKeyDown={handleKey}
+style={{ position: “absolute”, inset: 0, opacity: 0, fontSize: 16 }}
+onFocus={e => { focused.current = true; e.target.parentElement.querySelector(“div”).style.borderColor = `${color.primary}66`; e.target.parentElement.querySelector(“div”).style.boxShadow = `0 0 0 3px ${color.primary}15`; }}
+onBlur={e => { focused.current = false; e.target.parentElement.querySelector(“div”).style.borderColor = “rgba(120,120,128,0.15)”; e.target.parentElement.querySelector(“div”).style.boxShadow = “none”; }}
+/>
+</div>
+);
+}
+
+/* ═══════════════════ HOME SCREEN ═══════════════════ */
+
+/* ═══════════════════ ACCOUNT SCREEN ═══════════════════ */
+function AccountScreen({ child, allChildren, onBack, onSelectChild, onAddChild, onUpdate, onDelete, dark, onToggleDark, onExport, onImport }) {
+const c = COLORS.find(x => x.name === child.color) || COLORS[0];
+const balance = (child.transactions || []).reduce((s, t) => s + t.amount, 0);
+const activeBuckets = child.buckets || [];
+const hasBuckets = activeBuckets.length > 0;
+const multiB = activeBuckets.length > 1;
+const [showChildPicker, setShowChildPicker] = useState(false);
+const [showQuickAdd, setShowQuickAdd] = useState(false);
+const [qaName, setQaName] = useState(””);
+const [qaColor, setQaColor] = useState(COLORS[0].name);
+const [qaChores, setQaChores] = useState(true);
+
+// Sub-views
+const [activeBucket, setActiveBucket] = useState(null);
+const [reordering, setReordering] = useState(false);
+const [historyOpen, setHistoryOpen] = useState(false);
+
+// Modals
+const [showTx, setShowTx] = useState(false);
+const [showBucket, setShowBucket] = useState(false);
+const [showRecurring, setShowRecurring] = useState(false);
+const [showEditBucket, setShowEditBucket] = useState(null);
+const [showConfirmDel, setShowConfirmDel] = useState(null);
+const [showTransfer, setShowTransfer] = useState(false);
+const [showTransferBlocked, setShowTransferBlocked] = useState(null); // string message or null
+const [showNoBucketPrompt, setShowNoBucketPrompt] = useState(false);
+const [showNeedBucketPrompt, setShowNeedBucketPrompt] = useState(null); // “tx” | “recurring” | “editRec” | null
+const [pendingTxType, setPendingTxType] = useState(null);
+const [pendingRecurring, setPendingRecurring] = useState(false);
+const [pendingReturn, setPendingReturn] = useState(null); // “tx” | “recurring” | “editRec” | null
+
+// Edit profile
+const [showEditProfile, setShowEditProfile] = useState(false);
+const [epName, setEpName] = useState(””);
+const [epColor, setEpColor] = useState(””);
+const [epPhoto, setEpPhoto] = useState(null);
+const [epRawPhoto, setEpRawPhoto] = useState(null);
+const [epShowCropper, setEpShowCropper] = useState(false);
+const [epPin, setEpPin] = useState(””);
+const [epChores, setEpChores] = useState(true);
+const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+const epFileRef = useRef();
+
+// Tx
+const [txType, setTxType] = useState(“deposit”);
+const [txCents, setTxCents] = useState(0);
+const [txDesc, setTxDesc] = useState(””);
+const [txMode, setTxMode] = useState(“single”);
+const [txBucket, setTxBucket] = useState(””);
+const [txSplitEdits, setTxSplitEdits] = useState({});
+const [txSplitMode, setTxSplitMode] = useState(“pct”);
+
+// Edit transaction (reuse full modals)
+const [editingTx, setEditingTx] = useState(null); // tx being edited, or null for new
+const [editingXferPair, setEditingXferPair] = useState(null); // paired transfer tx
+const [editingSplitTxs, setEditingSplitTxs] = useState(null); // array of split group txs being edited
+const [showDeleteTx, setShowDeleteTx] = useState(false);
+
+// Edit split group (kept for recurring edit)
+const [editSplitGroup, setEditSplitGroup] = useState(null);
+const [editSplitDesc, setEditSplitDesc] = useState(””);
+const [editSplitCents, setEditSplitCents] = useState(0);
+const [editSplitEdits, setEditSplitEdits] = useState({});
+const [editSplitMode, setEditSplitMode] = useState(“pct”);
+const [showDeleteSplit, setShowDeleteSplit] = useState(false);
+
+// New bucket
+const [bName, setBName] = useState(””);
+const [bGoalCents, setBGoalCents] = useState(0);
+const [bNameErr, setBNameErr] = useState(””);
+const [bIcon, setBIcon] = useState(“savings”);
+const [bRateTenths, setBRateTenths] = useState(0);
+const [bGrowth, setBGrowth] = useState(false);
+const [bRatePeriod, setBRatePeriod] = useState(“monthly”);
+
+// Edit bucket
+const [editBName, setEditBName] = useState(””);
+const [editBGoalCents, setEditBGoalCents] = useState(0);
+const [editBNameErr, setEditBNameErr] = useState(””);
+const [editBIcon, setEditBIcon] = useState(“savings”);
+const [editBRateTenths, setEditBRateTenths] = useState(0);
+const [editBGrowth, setEditBGrowth] = useState(false);
+const [editBRatePeriod, setEditBRatePeriod] = useState(“monthly”);
+
+// Transfer
+const [xferFrom, setXferFrom] = useState(””);
+const [xferTo, setXferTo] = useState(””);
+const [xferCents, setXferCents] = useState(0);
+const [xferErr, setXferErr] = useState(””);
+
+// Recurring
+const [rCents, setRCents] = useState(0);
+const [rDesc, setRDesc] = useState(””);
+const [rType, setRType] = useState(“add”);
+const [rFreq, setRFreq] = useState(“Weekly”);
+const [rDay, setRDay] = useState(new Date().getDay());
+const [rMode, setRMode] = useState(“single”);
+const [rBucket, setRBucket] = useState(””);
+const [rSplitEdits, setRSplitEdits] = useState({});
+const [rSplitMode, setRSplitMode] = useState(“pct”);
+
+// Edit recurring
+const [showEditRec, setShowEditRec] = useState(null);
+const [erCents, setErCents] = useState(0);
+const [erDesc, setErDesc] = useState(””);
+const [erType, setErType] = useState(“add”);
+const [erFreq, setErFreq] = useState(“Weekly”);
+const [erDay, setErDay] = useState(0);
+const [erBucket, setErBucket] = useState(””);
+const [erMode, setErMode] = useState(“single”);
+const [erSplitEdits, setErSplitEdits] = useState({});
+const [erSplitMode, setErSplitMode] = useState(“pct”);
+const [showDeleteRec, setShowDeleteRec] = useState(null);
+
+// Child mode (read-only view)
+const [childMode, setChildMode] = useState(false);
+const [showPinPrompt, setShowPinPrompt] = useState(false);
+const [pinInput, setPinInput] = useState(””);
+const [pinErr, setPinErr] = useState(””);
+
+// Goal celebration
+const [celebration, setCelebration] = useState(null); // { name, amount } or null
+const [showSettings, setShowSettings] = useState(false);
+const [importToast, setImportToast] = useState(null);
+const importRef = useRef();
+
+// Chores
+const [showChore, setShowChore] = useState(false);
+const [editChore, setEditChore] = useState(null);
+const [choreName, setChoreName] = useState(””);
+const [choreCents, setChoreCents] = useState(0);
+const [choreBucket, setChoreBucket] = useState(””);
+const [choreToast, setChoreToast] = useState(null); // { text, key }
+const [confirmChore, setConfirmChore] = useState(null); // chore obj or null
+
+const getSplitTotal = (ed) => Object.values(ed).reduce((s, v) => s + (parseInt(v) || 0), 0);
+const getEffective = (ed) => activeBuckets.filter(b => ed[b.id] !== undefined).map(b => ({ …b, splitPercent: parseInt(ed[b.id]) || 0 }));
+const commitSplits = (ed) => ({ …child, buckets: (child.buckets || []).map(b => ({ …b, splitPercent: ed[b.id] !== undefined ? Math.max(0, parseInt(ed[b.id]) || 0) : (b.splitPercent || 0) })) });
+const hasSavedSplit = activeBuckets.reduce((s, b) => s + (b.splitPercent || 0), 0) > 0;
+const nameExists = (n, exId) => activeBuckets.some(b => b.name.toLowerCase() === n.toLowerCase().trim() && b.id !== exId);
+const zeroEdits = () => ({});
+
+// ── Interest calculation (runs on load) ──
+useEffect(() => {
+const now = new Date();
+let changed = false;
+let txs = […(child.transactions || [])];
+const bkts = (child.buckets || []).map(b => {
+if (!b.interestRate || b.interestRate <= 0 || (b.allocated || 0) <= 0) return b;
+const lastDate = b.lastInterestDate ? new Date(b.lastInterestDate) : now;
+let months = (now.getFullYear() - lastDate.getFullYear()) * 12 + (now.getMonth() - lastDate.getMonth());
+if (months <= 0) return b;
+let bal = b.allocated || 0;
+const isMonthly = b.ratePeriod === “monthly”;
+const monthlyRate = isMonthly ? b.interestRate / 100 : b.interestRate / 100 / 12;
+const label = isMonthly ? `${b.interestRate}%/mo` : `${b.interestRate}% APR`;
+let totalInterest = 0;
+for (let m = 0; m < months; m++) {
+const interest = Math.round(bal * monthlyRate);
+if (interest <= 0) break;
+totalInterest += interest;
+bal += interest;
+txs.unshift({
+id: uid(),
+date: new Date(lastDate.getFullYear(), lastDate.getMonth() + m + 1, 1).toISOString(),
+amount: interest,
+description: `Interest earned (${label})`,
+bucketId: b.id,
+type: “interest”,
+});
+}
+if (totalInterest > 0) {
+changed = true;
+return { …b, allocated: bal, lastInterestDate: now.toISOString() };
+}
+return b;
+});
+if (changed) onUpdate({ …child, transactions: txs, buckets: bkts });
+}, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+// ── Recurring auto-run (executes due transactions on load) ──
+useEffect(() => {
+const now = new Date();
+const recs = child.recurring || [];
+if (recs.length === 0) return;
+let u = { …child, transactions: […(child.transactions || [])], buckets: […(child.buckets || [])], recurring: […recs] };
+let ran = false;
+u.recurring = u.recurring.map(r => {
+if (!r.nextDate) return r;
+let next = new Date(r.nextDate);
+let updated = { …r };
+while (next <= now) {
+const isAdd = r.recType === “add”;
+const amt = isAdd ? r.amount : -r.amount;
+if (r.autoSplit) {
+const splitBkts = (u.buckets || []).filter(b => (b.splitPercent || 0) > 0);
+const total = splitBkts.reduce((s, b) => s + b.splitPercent, 0);
+if (total === 100) {
+const sgId = uid(); let rem = r.amount;
+splitBkts.forEach((b, i) => {
+const last = i === splitBkts.length - 1;
+const sh = last ? rem : Math.round(r.amount * (b.splitPercent / 100));
+rem -= sh;
+u.transactions.unshift({ id: uid(), date: next.toISOString(), amount: sh, description: r.description || “Recurring deposit”, bucketId: b.id, autoSplit: true, splitGroup: sgId });
+u.buckets = u.buckets.map(bk => bk.id === b.id ? { …bk, allocated: (bk.allocated || 0) + sh } : bk);
+});
+ran = true;
+}
+} else if (r.bucketId) {
+u.transactions.unshift({ id: uid(), date: next.toISOString(), amount: amt, description: r.description || (isAdd ? “Recurring deposit” : “Recurring withdrawal”), bucketId: r.bucketId });
+u.buckets = u.buckets.map(b => b.id === r.bucketId ? { …b, allocated: (b.allocated || 0) + amt } : b);
+ran = true;
+}
+// Advance nextDate
+if (r.frequency === “Weekly”) {
+next = new Date(next); next.setDate(next.getDate() + 7);
+} else {
+next = new Date(next.getFullYear(), next.getMonth() + 1, r.day || next.getDate());
+const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+if ((r.day || 1) > lastDay) next.setDate(lastDay);
+}
+updated = { …updated, nextDate: next.toISOString() };
+}
+return updated;
+});
+if (ran) onUpdate(u);
+}, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+// ── Goal check wrapper ──
+const doUpdate = (newChild) => {
+const oldBuckets = child.buckets || [];
+const newBuckets = newChild.buckets || [];
+onUpdate(newChild);
+// Check if any bucket just reached its goal
+for (const nb of newBuckets) {
+if (nb.goal > 0 && (nb.allocated || 0) >= nb.goal) {
+const ob = oldBuckets.find(b => b.id === nb.id);
+if (ob && (ob.allocated || 0) < ob.goal) {
+setCelebration({ name: nb.name, amount: nb.goal });
+break;
+}
+}
+}
+};
+
+// ── Chore actions ──
+const openNewChore = () => {
+setChoreName(””); setChoreCents(0); setChoreBucket(activeBuckets[0]?.id || “”); setEditChore(null); setShowChore(true);
+};
+const openEditChore = (ch) => {
+setChoreName(ch.name); setChoreCents(ch.amount); setChoreBucket(ch.bucketId || activeBuckets[0]?.id || “”); setEditChore(ch); setShowChore(true);
+};
+const saveChore = () => {
+if (!choreName.trim() || choreCents <= 0) return;
+const chore = { id: editChore ? editChore.id : uid(), name: choreName.trim(), amount: choreCents, bucketId: choreBucket || null };
+const chores = child.chores || [];
+if (editChore) {
+doUpdate({ …child, chores: chores.map(c => c.id === editChore.id ? chore : c) });
+} else {
+doUpdate({ …child, chores: […chores, chore] });
+}
+setShowChore(false); setEditChore(null);
+};
+const deleteChore = (id) => {
+doUpdate({ …child, chores: (child.chores || []).filter(c => c.id !== id) });
+setShowChore(false); setEditChore(null);
+};
+const completeChore = (ch) => {
+if (!ch.bucketId) return;
+const now = new Date().toISOString();
+const t = { id: uid(), date: now, amount: ch.amount, description: `Chore: ${ch.name}`, bucketId: ch.bucketId };
+const u = {
+…child,
+transactions: [t, …(child.transactions || [])],
+buckets: (child.buckets || []).map(b => b.id === ch.bucketId ? { …b, allocated: (b.allocated || 0) + ch.amount } : b),
+chores: (child.chores || []).map(c => c.id === ch.id ? { …c, lastCompleted: now } : c),
+};
+doUpdate(u);
+const bkt = (child.buckets || []).find(b => b.id === ch.bucketId);
+setChoreToast({ text: `Earned ${fmt(ch.amount)} → ${bkt?.name || ""}`, key: Date.now() });
+setTimeout(() => setChoreToast(null), 2500);
+};
+
+const openTx = (type, bucketId) => {
+if (activeBuckets.length === 0) { setPendingTxType(type); setShowNoBucketPrompt(true); return; }
+setEditingTx(null); setEditingSplitTxs(null); setTxType(type); setTxCents(0); setTxDesc(””); setTxMode(“single”); setTxSplitEdits(zeroEdits());
+setTxBucket(bucketId || (child.buckets || [])[0]?.id || “”); setShowTx(true);
+};
+const openTransfer = (fromId) => {
+setEditingTx(null); setEditingXferPair(null);
+const buckets = child.buckets || [];
+const hasMoney = buckets.some(b => (b.allocated || 0) > 0);
+if (buckets.length < 2 && !hasMoney) {
+setShowTransferBlocked(“Transfers require at least two buckets, and one must have a balance. Create your buckets and add some funds to get started.”);
+} else if (buckets.length < 2 && hasMoney) {
+setShowTransferBlocked(“One more bucket is needed to transfer between them. Create another bucket to enable transfers.”);
+} else if (buckets.length >= 2 && !hasMoney) {
+setShowTransferBlocked(“At least one bucket must have money before you can transfer. Make a deposit first.”);
+} else {
+setXferFrom(fromId || “”); setXferTo(””); setXferCents(0); setXferErr(””); setShowTransfer(true);
+}
+};
+
+const openEditProfile = () => { setEpName(child.name); setEpColor(child.color); setEpPhoto(child.photo || null); setEpRawPhoto(null); setEpShowCropper(false); setEpPin(child.pin || “”); setEpChores(child.choresEnabled !== false); setShowEditProfile(true); };
+const saveProfile = () => {
+if (!epName.trim()) return;
+doUpdate({ …child, name: epName.trim(), color: epColor, photo: epPhoto, pin: epPin.trim() || null, choresEnabled: epChores });
+setShowEditProfile(false);
+};
+const handleEpFile = (e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => { setEpRawPhoto(ev.target.result); setEpShowCropper(true); }; r.readAsDataURL(f); e.target.value = “”; };
+
+/* ── actions ── */
+const addTx = () => {
+const cents = txCents;
+if (cents <= 0) return;
+const isDeposit = txType === “deposit”;
+
+```
+// EDIT MODE
+if (editingTx) {
+  // Editing a split group
+  if (editingSplitTxs) {
+    const groupIds = new Set(editingSplitTxs.map(t => t.id));
+    // Reverse old allocations
+    const oldAdj = {};
+    editingSplitTxs.forEach(t => { oldAdj[t.bucketId] = (oldAdj[t.bucketId] || 0) - t.amount; });
+    // Remove old transactions
+    let txs = (child.transactions || []).filter(t => !groupIds.has(t.id));
+    let bkts = (child.buckets || []).map(b => oldAdj[b.id] ? { ...b, allocated: (b.allocated || 0) + oldAdj[b.id] } : b);
+
+    if (txMode === "split") {
+      // Save as new split
+      const eff = getEffective(txSplitEdits).filter(b => (b.splitPercent || 0) > 0);
+      const st = eff.reduce((s, b) => s + b.splitPercent, 0);
+      if (st !== 100) return;
+      const sgId = uid(); let r = cents; const newTxs = []; const ups = {};
+      eff.forEach((b, i) => { const last = i === eff.length - 1; const sh = last ? r : Math.round(cents * (b.splitPercent / 100)); r -= sh; newTxs.push({ id: uid(), date: editingSplitTxs[0].date, amount: sh, description: txDesc || "Deposit", bucketId: b.id, autoSplit: true, splitGroup: sgId }); ups[b.id] = sh; });
+      txs = [...newTxs.reverse(), ...txs];
+      bkts = bkts.map(b => ups[b.id] !== undefined ? { ...b, allocated: (b.allocated || 0) + ups[b.id], splitPercent: parseInt(txSplitEdits[b.id]) || b.splitPercent || 0 } : { ...b, splitPercent: parseInt(txSplitEdits[b.id]) !== undefined ? parseInt(txSplitEdits[b.id]) || 0 : b.splitPercent || 0 });
+    } else {
+      // Convert to single bucket
+      const bkt = txBucket || null;
+      const newAmt = isDeposit ? cents : -cents;
+      txs = [{ id: uid(), date: editingSplitTxs[0].date, amount: newAmt, description: txDesc || (isDeposit ? "Deposit" : "Withdrawal"), bucketId: bkt }, ...txs];
+      if (bkt) bkts = bkts.map(b => b.id === bkt ? { ...b, allocated: (b.allocated || 0) + newAmt } : b);
+    }
+    doUpdate({ ...child, transactions: txs, buckets: bkts });
+    setTxCents(0); setTxDesc(""); setTxBucket(""); setTxMode("single"); setTxSplitEdits(zeroEdits()); setShowTx(false); setEditingTx(null); setEditingSplitTxs(null);
+    if (txMode === "single" && activeBucket && txBucket) setActiveBucket(txBucket);
+    else if (txMode === "split") setActiveBucket(null);
+    return;
+  }
+
+  // Editing a single transaction
+  const oldTx = editingTx;
+  const oldAmt = oldTx.amount;
+  const oldBkt = oldTx.bucketId;
+
+  if (txMode === "split" && isDeposit) {
+    // Convert single to split
+    const eff = getEffective(txSplitEdits).filter(b => (b.splitPercent || 0) > 0);
+    const st = eff.reduce((s, b) => s + b.splitPercent, 0);
+    if (st !== 100) return;
+    let txs = (child.transactions || []).filter(t => t.id !== oldTx.id);
+    let bkts = (child.buckets || []).map(b => b.id === oldBkt ? { ...b, allocated: (b.allocated || 0) - oldAmt } : b);
+    const sgId = uid(); let r = cents; const newTxs = []; const ups = {};
+    eff.forEach((b, i) => { const last = i === eff.length - 1; const sh = last ? r : Math.round(cents * (b.splitPercent / 100)); r -= sh; newTxs.push({ id: uid(), date: oldTx.date, amount: sh, description: txDesc || "Deposit", bucketId: b.id, autoSplit: true, splitGroup: sgId }); ups[b.id] = sh; });
+    txs = [...newTxs.reverse(), ...txs];
+    bkts = bkts.map(b => ups[b.id] !== undefined ? { ...b, allocated: (b.allocated || 0) + ups[b.id] } : b);
+    doUpdate({ ...child, transactions: txs, buckets: bkts });
+    setTxCents(0); setTxDesc(""); setTxBucket(""); setTxMode("single"); setTxSplitEdits(zeroEdits()); setShowTx(false); setEditingTx(null); setEditingSplitTxs(null);
+    setActiveBucket(null);
+    return;
+  }
+
+  // Single to single edit
+  const newAmt = isDeposit ? cents : -cents;
+  const newBkt = txBucket || null;
+  const u = { ...child };
+  u.transactions = (u.transactions || []).map(t => t.id === oldTx.id ? { ...t, description: txDesc || t.description, amount: newAmt, bucketId: newBkt } : t);
+  if (oldBkt) u.buckets = (u.buckets || []).map(b => b.id === oldBkt ? { ...b, allocated: (b.allocated || 0) - oldAmt } : b);
+  if (newBkt) u.buckets = (u.buckets || []).map(b => b.id === newBkt ? { ...b, allocated: (b.allocated || 0) + newAmt } : b);
+  doUpdate(u);
+  setTxCents(0); setTxDesc(""); setTxBucket(""); setTxMode("single"); setTxSplitEdits(zeroEdits()); setShowTx(false); setEditingTx(null); setEditingSplitTxs(null);
+  if (activeBucket && newBkt) setActiveBucket(newBkt);
+  return;
+}
+
+// NEW MODE
+if (isDeposit && txMode === "split" && hasBuckets) {
+  let uc = commitSplits(txSplitEdits);
+  const eff = getEffective(txSplitEdits).filter(b => (b.splitPercent || 0) > 0);
+  const st = eff.reduce((s, b) => s + b.splitPercent, 0);
+  if (st !== 100) return;
+  let r = cents; const txs = []; const ups = {}; const sgId = uid();
+  eff.forEach((b, i) => { const last = i === eff.length - 1; const sh = last ? r : Math.round(cents * (b.splitPercent / 100)); r -= sh; txs.push({ id: uid(), date: new Date().toISOString(), amount: sh, description: txDesc || "Deposit", bucketId: b.id, autoSplit: true, splitGroup: sgId }); ups[b.id] = (b.allocated || 0) + sh; });
+  uc = { ...uc, transactions: [...txs.reverse(), ...(uc.transactions || [])], buckets: (uc.buckets || []).map(b => ups[b.id] !== undefined ? { ...b, allocated: ups[b.id] } : b) };
+  doUpdate(uc);
+  setTxCents(0); setTxDesc(""); setTxBucket(""); setTxMode("single"); setTxSplitEdits(zeroEdits()); setShowTx(false);
+  setActiveBucket(null);
+} else {
+  const bkt = txBucket || null;
+  const t = { id: uid(), date: new Date().toISOString(), amount: isDeposit ? cents : -cents, description: txDesc || (isDeposit ? "Deposit" : "Withdrawal"), bucketId: bkt };
+  const u = { ...child, transactions: [t, ...(child.transactions || [])] };
+  if (bkt && isDeposit) u.buckets = (u.buckets || []).map(b => b.id === bkt ? { ...b, allocated: (b.allocated || 0) + cents } : b);
+  if (bkt && !isDeposit) u.buckets = (u.buckets || []).map(b => b.id === bkt ? { ...b, allocated: (b.allocated || 0) - cents } : b);
+  doUpdate(u);
+  setTxCents(0); setTxDesc(""); setTxBucket(""); setTxMode("single"); setTxSplitEdits(zeroEdits()); setShowTx(false);
+  // If on a bucket detail page, navigate to the bucket the user selected
+  if (activeBucket && bkt) setActiveBucket(bkt);
+}
+```
+
+};
+
+const doTransfer = () => {
+const cents = xferCents;
+if (cents <= 0 || !xferFrom || !xferTo || xferFrom === xferTo) return;
+const fromB = (child.buckets || []).find(b => b.id === xferFrom);
+const toB = (child.buckets || []).find(b => b.id === xferTo);
+if (!fromB || !toB) return;
+const avail = editingTx ? (fromB.allocated || 0) + Math.abs(editingTx.amount) : (fromB.allocated || 0);
+if (cents > avail) { setXferErr(`Insufficient funds. ${fromB.name} only has ${fmt(avail)} available.`); return; }
+setXferErr(””);
+
+```
+// EDIT MODE
+if (editingTx && editingXferPair) {
+  const oldFrom = editingTx; // amount < 0
+  const oldTo = editingXferPair; // amount > 0
+  // Reverse old allocations, apply new
+  const u = {
+    ...child,
+    transactions: (child.transactions || []).map(t => {
+      if (t.id === oldFrom.id) return { ...t, amount: -cents, description: `Transfer to ${toB.name}`, bucketId: xferFrom };
+      if (t.id === oldTo.id) return { ...t, amount: cents, description: `Transfer from ${fromB.name}`, bucketId: xferTo };
+      return t;
+    }),
+    buckets: (child.buckets || []).map(b => {
+      let alloc = b.allocated || 0;
+      if (b.id === oldFrom.bucketId) alloc -= oldFrom.amount; // reverse old (subtract negative = add back)
+      if (b.id === oldTo.bucketId) alloc -= oldTo.amount; // reverse old (subtract positive = remove)
+      if (b.id === xferFrom) alloc -= cents; // apply new out
+      if (b.id === xferTo) alloc += cents; // apply new in
+      return { ...b, allocated: alloc };
+    }),
+  };
+  doUpdate(u);
+  setXferCents(0); setXferFrom(""); setXferTo(""); setXferErr(""); setShowTransfer(false); setEditingTx(null); setEditingXferPair(null);
+  return;
+}
+
+// NEW MODE
+const now = new Date();
+const txOut = { id: uid(), date: new Date(now.getTime()).toISOString(), amount: -cents, description: `Transfer to ${toB.name}`, bucketId: xferFrom, type: "transfer", xferOrder: 1 };
+const txIn = { id: uid(), date: new Date(now.getTime()).toISOString(), amount: cents, description: `Transfer from ${fromB.name}`, bucketId: xferTo, type: "transfer", xferOrder: 0 };
+const u = {
+  ...child,
+  transactions: [txIn, txOut, ...(child.transactions || [])],
+  buckets: (child.buckets || []).map(b => {
+    if (b.id === xferFrom) return { ...b, allocated: (b.allocated || 0) - cents };
+    if (b.id === xferTo) return { ...b, allocated: (b.allocated || 0) + cents };
+    return b;
+  }),
+};
+doUpdate(u);
+setXferCents(0); setXferFrom(""); setXferTo(""); setXferErr(""); setShowTransfer(false);
+```
+
+};
+
+const openEditTx = (tx) => {
+// Split group: open regular deposit modal in split mode
+if (tx.autoSplit && tx.splitGroup) {
+const groupTxs = (child.transactions || []).filter(t => t.splitGroup === tx.splitGroup);
+const totalCents = groupTxs.reduce((s, t) => s + Math.abs(t.amount), 0);
+setEditingSplitTxs(groupTxs);
+setEditingTx(tx); // mark as editing
+setEditingXferPair(null);
+setTxType(“deposit”);
+setTxDesc(groupTxs[0]?.description || “”);
+setTxCents(totalCents);
+setTxMode(“split”);
+setTxBucket(””);
+// Load split percentages from actual transaction amounts
+const edits = {};
+activeBuckets.forEach(b => { edits[b.id] = “0”; });
+groupTxs.forEach(t => { if (totalCents > 0) edits[t.bucketId] = Math.round((Math.abs(t.amount) / totalCents) * 100).toString(); });
+setTxSplitEdits(edits);
+setShowTx(true);
+return;
+}
+// Transfer: open transfer modal pre-filled
+if (tx.type === “transfer”) {
+const allTx = child.transactions || [];
+const paired = allTx.find(t => t.type === “transfer” && t.date === tx.date && t.id !== tx.id);
+const fromTx = tx.amount < 0 ? tx : paired;
+const toTx = tx.amount > 0 ? tx : paired;
+if (fromTx && toTx) {
+setEditingTx(fromTx);
+setEditingXferPair(toTx);
+setXferFrom(fromTx.bucketId);
+setXferTo(toTx.bucketId);
+setXferCents(Math.abs(fromTx.amount));
+setXferErr(””);
+setShowTransfer(true);
+}
+return;
+}
+// Interest: open as deposit (positive amount)
+// Regular deposit or withdrawal: open tx modal pre-filled
+setEditingTx(tx);
+setEditingXferPair(null);
+setEditingSplitTxs(null);
+setTxType(tx.amount > 0 ? “deposit” : “withdrawal”);
+setTxDesc(tx.description);
+setTxCents(Math.abs(tx.amount));
+setTxBucket(tx.bucketId || “”);
+setTxMode(“single”);
+setTxSplitEdits(zeroEdits());
+setShowTx(true);
+};
+
+const deleteEditingTx = () => {
+if (!editingTx) return;
+// Deleting a split group
+if (editingSplitTxs) {
+const groupIds = new Set(editingSplitTxs.map(t => t.id));
+const bucketAdj = {};
+editingSplitTxs.forEach(t => { bucketAdj[t.bucketId] = (bucketAdj[t.bucketId] || 0) - t.amount; });
+const u = {
+…child,
+transactions: (child.transactions || []).filter(t => !groupIds.has(t.id)),
+buckets: (child.buckets || []).map(b => bucketAdj[b.id] ? { …b, allocated: (b.allocated || 0) + bucketAdj[b.id] } : b),
+};
+doUpdate(u);
+setEditingTx(null); setEditingSplitTxs(null); setShowDeleteTx(false); setShowTx(false);
+return;
+}
+if (editingXferPair) {
+// Delete both transfer transactions
+const ids = new Set([editingTx.id, editingXferPair.id]);
+const bucketAdj = {};
+[editingTx, editingXferPair].forEach(t => { if (t.bucketId) bucketAdj[t.bucketId] = (bucketAdj[t.bucketId] || 0) - t.amount; });
+const u = {
+…child,
+transactions: (child.transactions || []).filter(t => !ids.has(t.id)),
+buckets: (child.buckets || []).map(b => bucketAdj[b.id] ? { …b, allocated: (b.allocated || 0) + bucketAdj[b.id] } : b),
+};
+doUpdate(u);
+setEditingTx(null); setEditingXferPair(null); setShowDeleteTx(false); setShowTransfer(false);
+} else {
+const u = {
+…child,
+transactions: (child.transactions || []).filter(t => t.id !== editingTx.id),
+buckets: editingTx.bucketId ? (child.buckets || []).map(b => b.id === editingTx.bucketId ? { …b, allocated: (b.allocated || 0) - editingTx.amount } : b) : (child.buckets || []),
+};
+doUpdate(u);
+setEditingTx(null); setShowDeleteTx(false); setShowTx(false);
+}
+};
+
+const saveEditSplit = () => {
+if (!editSplitGroup || editSplitGroup.length === 0) return;
+const groupIds = new Set(editSplitGroup.map(t => t.id));
+const oldBucketAdj = {};
+editSplitGroup.forEach(t => { oldBucketAdj[t.bucketId] = (oldBucketAdj[t.bucketId] || 0) - t.amount; });
+// Calculate new split amounts
+const buckets = child.buckets || [];
+const eff = buckets.map(b => ({ …b, splitPct: parseInt(editSplitEdits[b.id]) || 0 })).filter(b => b.splitPct > 0);
+const totalPct = eff.reduce((s, b) => s + b.splitPct, 0);
+if (totalPct !== 100) return;
+let rem = editSplitCents;
+const newTxMap = {};
+eff.forEach((b, i) => {
+const last = i === eff.length - 1;
+const share = last ? rem : Math.round(editSplitCents * (b.splitPct / 100));
+rem -= share;
+newTxMap[b.id] = share;
+});
+// Build new transactions replacing old ones
+const sgId = editSplitGroup[0].splitGroup;
+const date = editSplitGroup[0].date;
+const newTxs = Object.entries(newTxMap).map(([bid, amt]) => ({
+id: uid(), date, amount: amt, description: editSplitDesc || “Deposit”,
+bucketId: bid, autoSplit: true, splitGroup: sgId,
+}));
+const newBucketAdj = {};
+newTxs.forEach(t => { newBucketAdj[t.bucketId] = (newBucketAdj[t.bucketId] || 0) + t.amount; });
+const u = {
+…child,
+transactions: […newTxs.reverse(), …(child.transactions || []).filter(t => !groupIds.has(t.id))],
+buckets: buckets.map(b => {
+let alloc = b.allocated || 0;
+if (oldBucketAdj[b.id]) alloc += oldBucketAdj[b.id];
+if (newBucketAdj[b.id]) alloc += newBucketAdj[b.id];
+const sp = editSplitEdits[b.id] !== undefined ? parseInt(editSplitEdits[b.id]) || 0 : b.splitPercent;
+return { …b, allocated: alloc, splitPercent: sp };
+}),
+};
+doUpdate(u);
+setEditSplitGroup(null);
+};
+
+const deleteEditSplit = () => {
+if (!editSplitGroup || editSplitGroup.length === 0) return;
+const groupIds = new Set(editSplitGroup.map(t => t.id));
+const bucketAdj = {};
+editSplitGroup.forEach(t => { bucketAdj[t.bucketId] = (bucketAdj[t.bucketId] || 0) - t.amount; });
+const u = {
+…child,
+transactions: (child.transactions || []).filter(t => !groupIds.has(t.id)),
+buckets: (child.buckets || []).map(b => bucketAdj[b.id] ? { …b, allocated: (b.allocated || 0) + bucketAdj[b.id] } : b),
+};
+doUpdate(u);
+setEditSplitGroup(null); setShowDeleteSplit(false);
+};
+
+const addBucket = () => {
+if (!bName.trim()) return;
+if (nameExists(bName)) { setBNameErr(“A bucket with this name already exists”); return; }
+const newId = uid();
+doUpdate({ …child, buckets: [{ id: newId, name: bName.trim(), goal: bGoalCents, allocated: 0, splitPercent: 0, icon: bIcon, interestRate: bGrowth && bRateTenths > 0 ? bRateTenths / 10 : 0, ratePeriod: bRatePeriod, lastInterestDate: new Date().toISOString() }, …(child.buckets || [])] });
+setBName(””); setBGoalCents(0); setBNameErr(””); setBIcon(“spending”); setBRateTenths(0); setBGrowth(false); setBRatePeriod(“monthly”); setShowBucket(false);
+if (pendingReturn === “tx”) {
+setTxMode(“split”); setShowTx(true); setPendingReturn(null);
+} else if (pendingReturn === “recurring”) {
+setRMode(“split”); setShowRecurring(true); setPendingReturn(null);
+} else if (pendingReturn === “editRec”) {
+setErMode(“split”); setPendingReturn(null);
+} else if (pendingTxType) {
+setTxType(pendingTxType); setTxCents(0); setTxDesc(””); setTxMode(“single”); setTxSplitEdits(zeroEdits());
+setTxBucket(newId); setShowTx(true); setPendingTxType(null);
+} else if (pendingRecurring) {
+setRCents(0); setRDesc(””); setRType(“add”); setRFreq(“Weekly”); setRDay(new Date().getDay()); setRMode(“single”); setRBucket(newId); setRSplitEdits(zeroEdits()); setShowRecurring(true); setPendingRecurring(false);
+}
+};
+
+const updBucket = () => {
+if (!editBName.trim() || !showEditBucket) return;
+if (nameExists(editBName, showEditBucket.id)) { setEditBNameErr(“A bucket with this name already exists”); return; }
+const oldName = showEditBucket.name;
+const newName = editBName.trim();
+// Update bucket and propagate name to transfer descriptions in history
+let txs = child.transactions || [];
+if (oldName !== newName) {
+txs = txs.map(t => {
+if (t.type === “transfer” && t.description) {
+return { …t, description: t.description.replace(`to ${oldName}`, `to ${newName}`).replace(`from ${oldName}`, `from ${newName}`) };
+}
+return t;
+});
+}
+doUpdate({ …child, transactions: txs, buckets: (child.buckets || []).map(b => b.id === showEditBucket.id ? { …b, name: newName, goal: editBGoalCents, icon: editBIcon, interestRate: editBGrowth && editBRateTenths > 0 ? editBRateTenths / 10 : 0, ratePeriod: editBRatePeriod } : b) });
+setShowEditBucket(null); setEditBNameErr(””);
+};
+
+const delBucket = (bid) => {
+const bkt = (child.buckets || []).find(b => b.id === bid);
+const delNames = { …(child.deletedBuckets || {}), [bid]: bkt?.name || “Unknown” };
+doUpdate({ …child, buckets: (child.buckets || []).filter(b => b.id !== bid), deletedBuckets: delNames });
+setShowConfirmDel(null);
+if (activeBucket === bid) setActiveBucket(null);
+};
+
+const moveBucket = (idx, dir) => {
+const bs = […(child.buckets || [])];
+const ni = idx + dir;
+if (ni < 0 || ni >= bs.length) return;
+[bs[idx], bs[ni]] = [bs[ni], bs[idx]];
+doUpdate({ …child, buckets: bs });
+};
+
+const addRec = () => {
+const cents = rCents;
+if (cents <= 0) return;
+const dayLabel = rFreq === “Weekly” ? DAYS_FULL[rDay] : `${rDay}${rDay === 1 || rDay === 21 || rDay === 31 ? "st" : rDay === 2 || rDay === 22 ? "nd" : rDay === 3 || rDay === 23 ? "rd" : "th"}`;
+const recBase = { id: uid(), amount: cents, recType: rType, description: rDesc || (rType === “add” ? “Recurring deposit” : “Recurring withdrawal”), frequency: rFreq, day: rDay, dayLabel, nextDate: nxtDate(rFreq, rDay) };
+if (rMode === “split” && rType === “add”) {
+const uc = commitSplits(rSplitEdits);
+doUpdate({ …uc, recurring: […(uc.recurring || []), { …recBase, bucketId: null, autoSplit: true }] });
+} else {
+doUpdate({ …child, recurring: […(child.recurring || []), { …recBase, bucketId: rBucket || null, autoSplit: false }] });
+}
+setRCents(0); setRDesc(””); setRType(“add”); setRFreq(“Weekly”); setRDay(new Date().getDay()); setRBucket(””); setRMode(“single”); setRSplitEdits(zeroEdits()); setShowRecurring(false);
+};
+
+const delRec = (rec) => {
+// Only remove the recurring TEMPLATE. Past transactions created from this template are preserved.
+doUpdate({ …child, recurring: (child.recurring || []).filter(r => r.id !== rec.id) });
+setShowDeleteRec(null);
+setShowEditRec(null);
+};
+
+const openEditRec = (r) => {
+setShowEditRec(r);
+setErCents(r.amount);
+setErDesc(r.description || “”);
+setErType(r.recType || “add”);
+setErFreq(r.frequency || “Weekly”);
+setErDay(r.day ?? (r.frequency === “Weekly” ? new Date().getDay() : new Date().getDate()));
+setErBucket(r.bucketId || (child.buckets || [])[0]?.id || “”);
+setErMode(r.autoSplit ? “split” : “single”);
+// Load saved split percentages from buckets, or zero for non-split
+if (r.autoSplit) {
+const edits = {};
+activeBuckets.forEach(b => { if ((b.splitPercent || 0) > 0) edits[b.id] = (b.splitPercent).toString(); });
+setErSplitEdits(edits);
+} else {
+setErSplitEdits(zeroEdits());
+}
+};
+
+const saveEditRec = () => {
+// IMPORTANT: Only update the recurring TEMPLATE. Never modify past transactions
+// that were created from this recurring item. Only future occurrences use the new values.
+if (!showEditRec) return;
+const cents = erCents;
+if (cents <= 0) return;
+const dayLabel = erFreq === “Weekly” ? DAYS_FULL[erDay] : `${erDay}${erDay === 1 || erDay === 21 || erDay === 31 ? "st" : erDay === 2 || erDay === 22 ? "nd" : erDay === 3 || erDay === 23 ? "rd" : "th"}`;
+const isSplit = erMode === “split” && erType === “add”;
+const updated = { …showEditRec, amount: cents, recType: erType, description: erDesc || (erType === “add” ? “Recurring deposit” : “Recurring withdrawal”), frequency: erFreq, day: erDay, dayLabel, nextDate: nxtDate(erFreq, erDay), bucketId: isSplit ? null : (erBucket || null), autoSplit: isSplit };
+if (isSplit) {
+const uc = commitSplits(erSplitEdits);
+// Only replace the recurring template, transactions array untouched
+doUpdate({ …uc, recurring: (uc.recurring || []).map(r => r.id === showEditRec.id ? updated : r) });
+} else {
+// Only replace the recurring template, transactions array untouched
+doUpdate({ …child, recurring: (child.recurring || []).map(r => r.id === showEditRec.id ? updated : r) });
+}
+setShowEditRec(null);
+};
+const sortedTx = […(child.transactions || [])].sort((a, b) => { const d = new Date(b.date) - new Date(a.date); if (d !== 0) return d; return (a.xferOrder ?? 99) - (b.xferOrder ?? 99); });
+const depCents = txType === “deposit” && txCents ? txCents : 0;
+const txSplitTotal = getSplitTotal(txSplitEdits);
+const erSplitTotal = getSplitTotal(erSplitEdits);
+const rSplitTotal = getSplitTotal(rSplitEdits);
+
+// ── BUCKET DETAIL VIEW ──
+const selBucket = activeBucket ? (child.buckets || []).find(b => b.id === activeBucket) : null;
+const bTx = selBucket ? sortedTx.filter(t => t.bucketId === selBucket.id) : null;
+const selBI = selBucket ? getBI(selBucket.icon) : null;
+const selPct = selBucket && selBucket.goal > 0 ? Math.min(100, ((selBucket.allocated || 0) / selBucket.goal) * 100) : 0;
+
+// ── shared edit bucket modals ──
+function renderEditBucketModals() {
+return (
+<>
+<Modal open={!!showEditBucket} onClose={() => setShowEditBucket(null)} title=“Edit Bucket”>
+<IconPicker value={editBIcon} onChange={setEditBIcon} color={{ primary: UI, light: UI_LIGHT }} onSelect={label => { const labels = ICON_LIST.map(i => i.label); if (!editBName || labels.includes(editBName)) setEditBName(label); }} />
+<Field label=“Name” value={editBName} onChange={v => { setEditBName(v); setEditBNameErr(””); }} placeholder=“Bucket name” error={editBNameErr} />
+<MoneyField label="Goal amount (optional)" cents={editBGoalCents} onChange={setEditBGoalCents} />
+<div style={{ marginBottom: 14 }}>
+<div style={{ display: “flex”, alignItems: “center”, justifyContent: “space-between”, marginBottom: editBGrowth ? 12 : 0 }}>
+<label style={{ fontSize: 13, fontWeight: 600, color: “var(–sub)” }}>Enable Growth</label>
+<button onClick={() => setEditBGrowth(!editBGrowth)} style={{
+width: 50, height: 30, borderRadius: 15, border: “none”, cursor: “pointer”, padding: 2, transition: “background 0.25s”,
+background: editBGrowth ? “#AF52DE” : “rgba(120,120,128,0.16)”, display: “flex”, alignItems: “center”,
+}}>
+<div style={{ width: 26, height: 26, borderRadius: 13, background: “#fff”, boxShadow: “0 1px 4px rgba(0,0,0,0.15)”, transition: “transform 0.25s”, transform: editBGrowth ? “translateX(20px)” : “translateX(0)” }} />
+</button>
+</div>
+{editBGrowth && (
+<>
+<div style={{ display: “flex”, gap: 8, marginBottom: 10 }}>
+<Pill selected={editBRatePeriod === “monthly”} onClick={() => setEditBRatePeriod(“monthly”)} color=”#AF52DE”>Monthly</Pill>
+<Pill selected={editBRatePeriod === “annual”} onClick={() => setEditBRatePeriod(“annual”)} color=”#AF52DE”>Annual</Pill>
+</div>
+<RateField label=“Rate” tenths={editBRateTenths} onChange={setEditBRateTenths} suffix={editBRatePeriod === “annual” ? “APR” : “/mo”} />
+<p style={{ fontSize: 11, color: “var(–sub2)”, marginTop: -8, marginBottom: 10 }}>{editBRatePeriod === “monthly” ? “This rate is applied each month to the bucket’s positive balance.” : “Annual rate divided by 12 and applied monthly to positive balances.”}</p>
+</>
+)}
+</div>
+<div style={{ display: “flex”, gap: 10, marginTop: 4 }}>
+<Btn onClick={() => { setShowConfirmDel(showEditBucket); setShowEditBucket(null); }} variant=“outline” color=”#D64045” full style={{ flex: 1 }}><Trash2 size={15} /> Delete</Btn>
+<Btn onClick={updBucket} disabled={!editBName.trim()} color={UI} full style={{ flex: 1 }}><Check size={15} /> Save</Btn>
+</div>
+</Modal>
+
+```
+    <Modal open={!!showConfirmDel} onClose={() => setShowConfirmDel(null)} title="Delete Bucket">
+      {showConfirmDel && (showConfirmDel.allocated || 0) !== 0 ? (
+        <>
+          <div style={{ textAlign: "center", marginBottom: 18 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(214,64,69,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+              <Trash2 size={28} color="#D64045" />
+            </div>
+            <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 4px", fontWeight: 600 }}>Bucket has a balance of {fmt(showConfirmDel.allocated)}</p>
+            <p style={{ color: "var(--sub)", fontSize: 14, margin: 0 }}>Transfer or spend the remaining funds before deleting this bucket.</p>
+          </div>
+          <Btn onClick={() => setShowConfirmDel(null)} full color="var(--sub)">Got It</Btn>
+        </>
+      ) : (
+        <>
+          <div style={{ textAlign: "center", marginBottom: 18 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(214,64,69,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+              <Trash2 size={28} color="#D64045" />
+            </div>
+            <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 4px", fontWeight: 600 }}>Delete "{showConfirmDel?.name}"?</p>
+            <p style={{ color: "var(--sub)", fontSize: 14, margin: 0 }}>The bucket will be removed. All transactions will remain visible in history.</p>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn onClick={() => setShowConfirmDel(null)} variant="outline" color="var(--sub)" full>Cancel</Btn>
+            <Btn onClick={() => delBucket(showConfirmDel.id)} color="#D64045" full><Trash2 size={15} /> Delete</Btn>
+          </div>
+        </>
+      )}
+    </Modal>
+  </>
+);
+```
+
+}
+
+// ── helper to render delete tx confirmation (shared between views) ──
+function renderDeleteTxModal() {
+const splitCount = editingSplitTxs?.length || 0;
+const msg = editingSplitTxs ? `Permanently delete all ${splitCount} transactions in this split deposit?`
+: editingXferPair ? “Permanently delete this transfer (both sides)?”
+: “Permanently delete this transaction?”;
+return (
+<Modal open={showDeleteTx} onClose={() => setShowDeleteTx(false)} title={editingSplitTxs ? “Delete Split Deposit” : “Delete Transaction”}>
+<p style={{ color: “var(–text2)”, fontSize: 15, margin: “0 0 18px” }}>{msg} The balance will be adjusted accordingly.</p>
+<div style={{ display: “flex”, gap: 10 }}>
+<Btn onClick={() => setShowDeleteTx(false)} variant=“outline” color=“var(–sub)” full>Cancel</Btn>
+<Btn onClick={deleteEditingTx} color="#D64045" full><Trash2 size={15} /> {editingSplitTxs ? “Delete All” : “Delete”}</Btn>
+</div>
+</Modal>
+);
+}
+
+function renderEditSplitModals() {
+const totalPct = activeBuckets.reduce((s, b) => s + (parseInt(editSplitEdits[b.id]) || 0), 0);
+return (
+<>
+<Modal open={!!editSplitGroup && !showDeleteSplit} onClose={() => setEditSplitGroup(null)} title=“Edit Split Deposit”>
+{editSplitGroup && (
+<>
+<div style={{ display: “flex”, alignItems: “center”, gap: 8, marginBottom: 14 }}>
+<span style={{ fontSize: 12, fontWeight: 700, color: “#34C759”, background: “rgba(52,199,89,0.1)”, padding: “3px 10px”, borderRadius: 6 }}>Split Deposit</span>
+<span style={{ fontSize: 12, color: “var(–sub)” }}>{editSplitGroup.length} buckets</span>
+<span style={{ fontSize: 12, color: “var(–sub2)” }}>{fmtDate(editSplitGroup[0]?.date)}</span>
+</div>
+<Field label="Description" value={editSplitDesc} onChange={setEditSplitDesc} placeholder="Description" />
+<MoneyField label="Total Amount" cents={editSplitCents} onChange={setEditSplitCents} />
+<SplitConfig
+buckets={activeBuckets}
+edits={editSplitEdits}
+setEdits={setEditSplitEdits}
+color={{ primary: “#34C759”, light: “rgba(52,199,89,0.08)” }}
+amountCents={editSplitCents}
+splitMode={editSplitMode}
+setSplitMode={setEditSplitMode}
+/>
+<div style={{ display: “flex”, gap: 10, marginTop: 4 }}>
+<Btn onClick={() => setShowDeleteSplit(true)} variant=“outline” color=”#D64045” full style={{ flex: 1 }}><Trash2 size={15} /> Delete All</Btn>
+<Btn onClick={saveEditSplit} disabled={editSplitCents <= 0 || totalPct !== 100} color={UI} full style={{ flex: 1 }}><Check size={15} /> Save</Btn>
+</div>
+</>
+)}
+</Modal>
+
+```
+    <Modal open={showDeleteSplit} onClose={() => setShowDeleteSplit(false)} title="Delete Split Deposit">
+      <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 18px" }}>Permanently delete all {editSplitGroup?.length || 0} transactions in this split? Bucket balances will be adjusted accordingly.</p>
+      <div style={{ display: "flex", gap: 10 }}>
+        <Btn onClick={() => setShowDeleteSplit(false)} variant="outline" color="var(--sub)" full>Cancel</Btn>
+        <Btn onClick={deleteEditSplit} color="#D64045" full><Trash2 size={15} /> Delete All</Btn>
+      </div>
+    </Modal>
+  </>
+);
+```
+
+}
+
+// ── helper to render tx modal (shared between account & bucket view) ──
+function renderTxModal() {
+const addColor = “#34C759”;
+const addLight = “rgba(52,199,89,0.08)”;
+const spendColor = “#D64045”;
+const activeColor = txType === “deposit” ? addColor : spendColor;
+return (
+<Modal open={showTx} onClose={() => { setShowTx(false); setEditingTx(null); setEditingSplitTxs(null); }} title={editingTx ? (editingSplitTxs ? “Edit Split Deposit” : txType === “deposit” ? “Edit Deposit” : “Edit Withdrawal”) : (txType === “deposit” ? “Deposit” : “Withdraw”)}>
+{!editingTx && (
+<div style={{ display: “flex”, gap: 8, marginBottom: 14 }}>
+<Pill selected={txType === “deposit”} onClick={() => { setTxType(“deposit”); setTxMode(“single”); setTxBucket(activeBuckets[0]?.id || “”); }} color={addColor}>Deposit</Pill>
+<Pill selected={txType === “withdrawal”} onClick={() => { setTxType(“withdrawal”); setTxMode(“single”); setTxBucket(activeBuckets[0]?.id || “”); }} color={spendColor}>Withdraw</Pill>
+</div>
+)}
+<Field label=“Description” value={txDesc} onChange={setTxDesc} placeholder={txType === “deposit” ? “Birthday money, chores…” : “Toy, candy…”} />
+<MoneyField label="Amount" cents={txCents} onChange={setTxCents} />
+
+```
+    {txType === "deposit" && hasBuckets && (
+      <>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Allocation</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Pill selected={txMode === "single"} onClick={() => { setTxMode("single"); setTxBucket(activeBuckets[0]?.id || ""); }} color={addColor}>Single Bucket</Pill>
+            <Pill selected={txMode === "split"} onClick={() => { if (multiB) setTxMode("split"); else { setShowTx(false); setShowNeedBucketPrompt("tx"); } }} color={addColor}><Sliders size={12} /> Split</Pill>
+          </div>
+        </div>
+        {txMode === "single" && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 5 }}>Bucket</label>
+            <select value={txBucket} onChange={e => setTxBucket(e.target.value)} style={{ ...G.inp, width: "100%", fontSize: 15, fontWeight: 600, color: "var(--text)", fontFamily: FONT, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32, cursor: "pointer" }}>
+              {activeBuckets.map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+            </select>
+            {txBucket && txCents > 0 && (() => {
+              const b = activeBuckets.find(x => x.id === txBucket);
+              if (!b) return null;
+              const bal = b.allocated || 0;
+              let newBal = bal;
+              if (editingTx) {
+                if (editingSplitTxs) { editingSplitTxs.forEach(t => { if (t.bucketId === b.id) newBal -= t.amount; }); }
+                else if (b.id === editingTx.bucketId) newBal -= editingTx.amount;
+              }
+              newBal += txCents;
+              const diff = newBal - bal;
+              if (diff === 0) return null;
+              return (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#34C759" }}>+ {fmt(txCents)}</span>
+                  <span style={{ fontSize: 11, color: "var(--sub2)" }}>=</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>{fmt(newBal)}</span>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+        {txMode === "split" && (
+          <>
+            <SplitConfig buckets={activeBuckets} edits={txSplitEdits} setEdits={setTxSplitEdits} color={{ primary: addColor, light: addLight }} amountCents={txCents} splitMode={txSplitMode} setSplitMode={setTxSplitMode} />
+          </>
+        )}
+      </>
+    )}
+
+    {txType === "withdrawal" && hasBuckets && (
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 5 }}>From Bucket</label>
+        <select value={txBucket} onChange={e => setTxBucket(e.target.value)} style={{ ...G.inp, width: "100%", fontSize: 15, fontWeight: 600, color: "var(--text)", fontFamily: FONT, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32, cursor: "pointer" }}>
+          {activeBuckets.map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+        </select>
+        {txBucket && txCents > 0 && (() => {
+          const b = activeBuckets.find(x => x.id === txBucket);
+          if (!b) return null;
+          const bal = b.allocated || 0;
+          let newBal = bal;
+          if (editingTx && b.id === editingTx.bucketId) newBal -= editingTx.amount;
+          newBal -= txCents;
+          return (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#D64045" }}>{"\u2212"} {fmt(txCents)}</span>
+              <span style={{ fontSize: 11, color: "var(--sub2)" }}>=</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: newBal < 0 ? "#D64045" : "var(--text2)" }}>{fmt(newBal)}</span>
+            </div>
+          );
+        })()}
+      </div>
+    )}
+
+    {editingTx ? (
+      <div style={{ display: "flex", gap: 10 }}>
+        <Btn onClick={() => setShowDeleteTx(true)} variant="outline" color="#D64045" full style={{ flex: 1 }}><Trash2 size={15} /> {editingSplitTxs ? "Delete All" : "Delete"}</Btn>
+        <Btn onClick={addTx} disabled={txCents <= 0 || (txMode === "single" && !txBucket) || (txMode === "split" && txSplitTotal !== 100)} color={activeColor} full style={{ flex: 1 }}><Check size={15} /> Save</Btn>
+      </div>
+    ) : (
+      <Btn onClick={addTx} disabled={txCents <= 0 || (txMode === "single" && !txBucket) || (txType === "deposit" && txMode === "split" && txSplitTotal !== 100)} full color={activeColor}>
+        <Check size={18} /> {txType === "deposit" ? "Deposit" : "Withdraw"}
+      </Btn>
+    )}
+  </Modal>
+);
+```
+
+}
+
+function renderTransferModal() {
+const fromB = xferFrom ? (child.buckets || []).find(b => b.id === xferFrom) : null;
+const toB = xferTo ? (child.buckets || []).find(b => b.id === xferTo) : null;
+const fromAvail = fromB ? (fromB.allocated || 0) + (editingTx && editingTx.bucketId === xferFrom ? Math.abs(editingTx.amount) : 0) : 0;
+const liveErr = xferFrom && xferCents > 0 && xferCents > fromAvail ? `Insufficient funds. ${fromB?.name} only has ${fmt(fromAvail)}.` : “”;
+const selectStyle = { …G.inp, width: “100%”, fontSize: 15, fontWeight: 600, color: “var(–text)”, fontFamily: FONT, appearance: “none”, WebkitAppearance: “none”, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: “no-repeat”, backgroundPosition: “right 12px center”, paddingRight: 32, cursor: “pointer” };
+return (
+<>
+<Modal open={showTransfer} onClose={() => { setShowTransfer(false); setEditingTx(null); setEditingXferPair(null); }} title={editingTx ? “Edit Transfer” : “Transfer”}>
+<MoneyField label=“Amount” cents={xferCents} onChange={setXferCents} error={liveErr || xferErr} />
+
+```
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 5 }}>From</label>
+      <select value={xferFrom} onChange={e => { setXferFrom(e.target.value); setXferErr(""); }} style={selectStyle}>
+        <option value="">Select bucket...</option>
+        {activeBuckets.map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+      </select>
+      {fromB && xferCents > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#D64045" }}>{"\u2212"} {fmt(xferCents)}</span>
+          <span style={{ fontSize: 11, color: "var(--sub2)" }}>=</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: fromAvail - xferCents < 0 ? "#D64045" : "var(--text2)" }}>{fmt(fromAvail - xferCents)}</span>
+        </div>
+      )}
+    </div>
+
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 5 }}>To</label>
+      <select value={xferTo} onChange={e => setXferTo(e.target.value)} style={selectStyle}>
+        <option value="">Select bucket...</option>
+        {activeBuckets.filter(b => b.id !== xferFrom).map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+      </select>
+      {toB && xferCents > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#34C759" }}>+ {fmt(xferCents)}</span>
+          <span style={{ fontSize: 11, color: "var(--sub2)" }}>=</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>{fmt((toB.allocated || 0) + xferCents)}</span>
+        </div>
+      )}
+    </div>
+
+    {editingTx ? (
+      <div style={{ display: "flex", gap: 10 }}>
+        <Btn onClick={() => setShowDeleteTx(true)} variant="outline" color="#D64045" full style={{ flex: 1 }}><Trash2 size={15} /> Delete</Btn>
+        <Btn onClick={doTransfer} disabled={xferCents <= 0 || !xferFrom || !xferTo || xferFrom === xferTo || !!liveErr} color="#FF9500" full style={{ flex: 1 }}><Check size={15} /> Save</Btn>
+      </div>
+    ) : (
+      <Btn onClick={doTransfer} disabled={xferCents <= 0 || !xferFrom || !xferTo || xferFrom === xferTo || !!liveErr} full color="#FF9500">
+        <ArrowRightLeft size={18} /> Transfer
+      </Btn>
+    )}
+  </Modal>
+
+  <Modal open={!!showTransferBlocked} onClose={() => setShowTransferBlocked(null)} title="Transfer Unavailable">
+    <div style={{ textAlign: "center", marginBottom: 18 }}>
+      <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(255,149,0,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+        <ArrowRightLeft size={28} color="#FF9500" />
+      </div>
+      <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 20px", lineHeight: 1.5 }}>{showTransferBlocked}</p>
+    </div>
+    <Btn onClick={() => setShowTransferBlocked(null)} full color="#FF9500">Got It</Btn>
+  </Modal>
+  </>
+);
+```
+
+}
+
+// ── MAIN VIEW ──
+return (
+<div style={{ minHeight: “100vh”, background: “var(–bg)”, fontFamily: FONT }}>
+<style>{LG_CSS}{`:root { ${dark ? THEME_VARS_DARK : THEME_VARS_LIGHT} }`}</style>
+{/* ── Persistent account header ── */}
+<div style={{ position: “relative”, zIndex: 10 }}>
+<div style={{ background: `linear-gradient(160deg, ${c.primary}ee, ${c.dark}dd)`, padding: “16px 20px 18px”, borderRadius: “0 0 28px 28px”, position: “relative”, overflow: “hidden” }}>
+<div style={{ position: “absolute”, top: -80, right: -80, width: 200, height: 200, borderRadius: “50%”, background: “rgba(255,255,255,0.07)”, filter: “blur(1px)” }} />
+<div style={{ position: “absolute”, bottom: -50, left: -30, width: 140, height: 140, borderRadius: “50%”, background: “rgba(255,255,255,0.05)”, filter: “blur(1px)” }} />
+<div style={{ maxWidth: 480, margin: “0 auto”, position: “relative”, display: “flex”, alignItems: “center”, gap: 14 }}>
+{childMode ? (
+<div style={{ borderRadius: “50%”, border: “2px solid rgba(255,255,255,0.4)”, display: “flex”, flexShrink: 0 }}><Avatar child={child} size={48} /></div>
+) : (
+<div onClick={openEditProfile} style={{ position: “relative”, flexShrink: 0, cursor: “pointer” }}>
+<div style={{ borderRadius: “50%”, border: “2px solid rgba(255,255,255,0.4)”, display: “flex” }}><Avatar child={child} size={48} /></div>
+<div style={{ position: “absolute”, bottom: -2, right: -2, width: 18, height: 18, borderRadius: “50%”, background: “rgba(255,255,255,0.3)”, backdropFilter: “blur(10px)”, WebkitBackdropFilter: “blur(10px)”, border: “1.5px solid rgba(255,255,255,0.5)”, display: “flex”, alignItems: “center”, justifyContent: “center” }}><Edit3 size={9} color="#fff" /></div>
+</div>
+)}
+<div style={{ flex: 1, minWidth: 0 }}>
+{childMode ? (
+<h2 style={{ margin: 0, color: “#fff”, fontSize: 22, fontWeight: 800, letterSpacing: -0.3 }}>{child.name}</h2>
+) : (
+<button onClick={() => setShowChildPicker(!showChildPicker)} style={{ background: “none”, border: “none”, cursor: “pointer”, display: “flex”, alignItems: “center”, gap: 5, padding: 0, fontFamily: “inherit” }}>
+<h2 style={{ margin: 0, color: “#fff”, fontSize: 22, fontWeight: 800, letterSpacing: -0.3, overflow: “hidden”, textOverflow: “ellipsis”, whiteSpace: “nowrap” }}>{child.name}</h2>
+<ChevronDown size={16} color=“rgba(255,255,255,0.6)” style={{ transform: showChildPicker ? “rotate(180deg)” : “rotate(0deg)”, transition: “transform 0.2s”, flexShrink: 0 }} />
+</button>
+)}
+</div>
+<div style={{ textAlign: “right”, flexShrink: 0 }}>
+<div style={{ fontSize: 10, fontWeight: 700, color: “rgba(255,255,255,0.45)”, letterSpacing: 0.5, textTransform: “uppercase” }}>Total Balance</div>
+<div style={{ fontSize: 20, fontWeight: 800, color: balance < 0 ? “#FF8A9A” : “#fff”, letterSpacing: -0.3, marginTop: 1 }}>{fmt(balance)}</div>
+</div>
+{child.pin && (
+<button onClick={() => { if (childMode) { setPinInput(””); setPinErr(””); setShowPinPrompt(true); } else { setChildMode(true); } }}
+style={{ background: “rgba(255,255,255,0.18)”, border: “0.5px solid rgba(255,255,255,0.25)”, borderRadius: 100, width: 32, height: 32, cursor: “pointer”, display: “flex”, alignItems: “center”, justifyContent: “center”, flexShrink: 0, padding: 0 }}>
+{childMode ? <Lock size={14} color="#fff" /> : <Unlock size={14} color="rgba(255,255,255,0.6)" />}
+</button>
+)}
+</div>
+</div>
+{showChildPicker && (
+<>
+<div onClick={() => setShowChildPicker(false)} style={{ position: “fixed”, inset: 0, zIndex: 49 }} />
+<div style={{ position: “absolute”, left: 20, top: 70, zIndex: 50, background: “rgba(30,30,30,0.92)”, backdropFilter: “blur(30px) saturate(180%)”, WebkitBackdropFilter: “blur(30px) saturate(180%)”, borderRadius: 16, border: “0.5px solid rgba(255,255,255,0.15)”, padding: 6, minWidth: 220, boxShadow: “0 12px 40px rgba(0,0,0,0.4)” }}>
+{(allChildren || []).map(ch => {
+const chBal = (ch.transactions || []).reduce((s, t) => s + t.amount, 0);
+const isCurrent = ch.id === child.id;
+return (
+<button key={ch.id} onClick={() => { setShowChildPicker(false); if (!isCurrent) { setActiveBucket(null); onSelectChild(ch.id); } }}
+style={{ display: “flex”, alignItems: “center”, gap: 10, width: “100%”, padding: “10px 12px”, background: isCurrent ? “rgba(255,255,255,0.12)” : “transparent”, border: “none”, borderRadius: 12, cursor: “pointer”, fontFamily: “inherit”, transition: “background 0.15s” }}
+onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background = “rgba(255,255,255,0.08)”; }}
+onMouseLeave={e => { if (!isCurrent) e.currentTarget.style.background = “transparent”; }}
+>
+<Avatar child={ch} size={32} />
+<div style={{ flex: 1, textAlign: “left” }}>
+<div style={{ fontSize: 15, fontWeight: 700, color: “#fff” }}>{ch.name}</div>
+<div style={{ fontSize: 12, color: “rgba(255,255,255,0.5)” }}>{fmt(chBal)}</div>
+</div>
+{isCurrent && <Check size={16} color="#fff" />}
+</button>
+);
+})}
+<div style={{ borderTop: “0.5px solid rgba(255,255,255,0.1)”, marginTop: 2, paddingTop: 2 }}>
+<button onClick={() => { setShowChildPicker(false); setQaName(””); setQaColor(COLORS[0].name); setQaChores(true); setShowQuickAdd(true); }}
+style={{ display: “flex”, alignItems: “center”, gap: 10, width: “100%”, padding: “10px 12px”, background: “transparent”, border: “none”, borderRadius: 12, cursor: “pointer”, fontFamily: “inherit”, transition: “background 0.15s” }}
+onMouseEnter={e => e.currentTarget.style.background = “rgba(255,255,255,0.08)”}
+onMouseLeave={e => e.currentTarget.style.background = “transparent”}
+>
+<div style={{ width: 32, height: 32, borderRadius: “50%”, background: “rgba(255,255,255,0.12)”, display: “flex”, alignItems: “center”, justifyContent: “center” }}><Plus size={16} color="rgba(255,255,255,0.7)" /></div>
+<span style={{ fontSize: 15, fontWeight: 700, color: “rgba(255,255,255,0.7)” }}>Add Child</span>
+</button>
+<button onClick={() => { setShowChildPicker(false); setShowSettings(true); }}
+style={{ display: “flex”, alignItems: “center”, gap: 10, width: “100%”, padding: “10px 12px”, background: “transparent”, border: “none”, borderRadius: 12, cursor: “pointer”, fontFamily: “inherit”, transition: “background 0.15s” }}
+onMouseEnter={e => e.currentTarget.style.background = “rgba(255,255,255,0.08)”}
+onMouseLeave={e => e.currentTarget.style.background = “transparent”}
+>
+<div style={{ width: 32, height: 32, borderRadius: “50%”, background: “rgba(255,255,255,0.12)”, display: “flex”, alignItems: “center”, justifyContent: “center” }}><Settings size={15} color="rgba(255,255,255,0.7)" /></div>
+<span style={{ fontSize: 15, fontWeight: 700, color: “rgba(255,255,255,0.7)” }}>Settings</span>
+</button>
+</div>
+</div>
+</>
+)}
+</div>
+
+```
+  <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Add Child">
+    <Field label="Name" value={qaName} onChange={setQaName} placeholder="Child's name" />
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Color</label>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {COLORS.map(cl => (
+          <button key={cl.name} onClick={() => setQaColor(cl.name)}
+            style={{ width: 32, height: 32, borderRadius: "50%", background: `linear-gradient(145deg, ${cl.primary}, ${cl.dark})`, border: qaColor === cl.name ? "2.5px solid #007AFF" : "2.5px solid transparent", cursor: "pointer", transition: "border 0.2s" }} />
+        ))}
+      </div>
+    </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, padding: "10px 0", borderTop: "0.5px solid var(--inp-border)" }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>Enable Chores</div>
+        <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 1 }}>Let this child earn money from tasks</div>
+      </div>
+      <button onClick={() => setQaChores(!qaChores)} style={{
+        width: 51, height: 31, borderRadius: 16, border: "none", cursor: "pointer", padding: 2,
+        background: qaChores ? "#34C759" : "rgba(120,120,128,0.16)", display: "flex", alignItems: "center",
+        transition: "background 0.3s"
+      }}>
+        <div style={{ width: 27, height: 27, borderRadius: 14, background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.15)", transition: "transform 0.25s", transform: qaChores ? "translateX(20px)" : "translateX(0)" }} />
+      </button>
+    </div>
+    <Btn onClick={() => { if (!qaName.trim()) return; onAddChild({ id: uid(), name: qaName.trim(), color: qaColor, photo: null, buckets: [], transactions: [], recurring: [], choresEnabled: qaChores }); setShowQuickAdd(false); }} disabled={!qaName.trim()} full color="#007AFF"><Plus size={16} /> Add Child</Btn>
+  </Modal>
+
+  {/* ── Content area ── */}
+  {selBucket ? (
+    <div style={{ padding: "18px 20px", maxWidth: 480, margin: "0 auto" }}>
+      {!childMode && <ActionBar
+        onAdd={() => openTx("deposit", selBucket.id)}
+        onSpend={() => openTx("withdrawal", selBucket.id)}
+        onTransfer={() => openTransfer(selBucket.id)}
+      />}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 0 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={() => setActiveBucket(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
+            <ArrowLeft size={20} color="var(--sub)" />
+          </button>
+          <h3 onClick={childMode ? undefined : () => { setShowEditBucket(selBucket); setEditBName(selBucket.name); setEditBGoalCents(selBucket.goal || 0); setEditBIcon(selBucket.icon || "savings"); setEditBRateTenths(selBucket.interestRate ? Math.round(selBucket.interestRate * 10) : 0); setEditBGrowth(!!(selBucket.interestRate)); setEditBRatePeriod(selBucket.ratePeriod || "monthly"); setEditBNameErr(""); }}
+            style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3, cursor: childMode ? "default" : "pointer" }}>{selBucket.name}</h3>
+        </div>
+        <span style={{ fontSize: 20, fontWeight: 800, color: (selBucket.allocated || 0) < 0 ? "#D64045" : "var(--text)", letterSpacing: -0.3 }}>{fmt(selBucket.allocated || 0)}</span>
+      </div>
+      <TxList transactions={bTx} buckets={child.buckets} color={{ primary: UI, light: UI_LIGHT }} emptyMsg="No transactions for this bucket yet." onEdit={childMode ? undefined : openEditTx} deletedBuckets={child.deletedBuckets} />
+    </div>
+  ) : (
+  <div style={{ padding: "18px 20px", maxWidth: 480, margin: "0 auto" }}>
+    {!childMode && <ActionBar
+      onAdd={() => openTx("deposit", "")}
+      onSpend={() => openTx("withdrawal", "")}
+      onTransfer={() => openTransfer("")}
+    />}
+
+    {/* Chores */}
+    {child.choresEnabled !== false && ((child.chores || []).length > 0 || !childMode) && (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3 }}>Chores</h3>
+        {!childMode && hasBuckets && (
+          <button onClick={openNewChore} style={{ ...G.glass, borderRadius: 100, padding: "7px 16px", color: UI, cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>
+            <Plus size={15} />
+          </button>
+        )}
+      </div>
+      {(child.chores || []).length === 0 && !childMode && (
+        <div style={{ ...G.card, borderRadius: 22, padding: 24, textAlign: "center", color: "var(--sub2)", fontSize: 14 }}>
+          {hasBuckets ? "Add chores to earn money for completing tasks." : "Create a bucket first, then add chores."}
+        </div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {(child.chores || []).map(ch => {
+          const bkt = (child.buckets || []).find(b => b.id === ch.bucketId);
+          return (
+            <div key={ch.id} style={{ ...G.glass, borderRadius: 18, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={() => { if (bkt) setConfirmChore(ch); }}
+                style={{ width: 36, height: 36, borderRadius: "50%", background: "transparent", border: bkt ? "2.5px dashed var(--sub3)" : "2.5px dashed var(--sub3)", cursor: bkt ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0, transition: "all 0.15s", opacity: bkt ? 1 : 0.4 }}
+              >
+                <Coins size={15} color="var(--sub)" />
+              </button>
+              <div onClick={childMode ? undefined : () => openEditChore(ch)} style={{ flex: 1, minWidth: 0, cursor: childMode ? "default" : "pointer" }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ch.name}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 1 }}>
+                  {bkt && <span style={{ fontSize: 12, color: "var(--sub)" }}>→ {bkt.name}</span>}
+                  {ch.lastCompleted && <span style={{ fontSize: 11, color: "var(--sub2)" }}>Last: {fmtDate(ch.lastCompleted)}</span>}
+                </div>
+              </div>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "var(--sub)", flexShrink: 0 }}>{fmt(ch.amount)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+    )}
+
+    {/* Buckets */}
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3 }}>Buckets</h3>
+        {!childMode && <div style={{ display: "flex", gap: 6 }}>
+          {multiB && (
+            <button onClick={() => setReordering(!reordering)} style={{ background: reordering ? UI_LIGHT : "rgba(255,255,255,0.35)", border: "none", borderRadius: 100, padding: "6px 12px", color: reordering ? UI : "var(--sub)", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>
+              <ArrowUpDown size={13} /> {reordering ? "Done" : "Reorder"}
+            </button>
+          )}
+          <button onClick={() => { setBName("Spending"); setBGoalCents(0); setBNameErr(""); setBIcon("spending"); setShowBucket(true); }} style={{ ...G.glass, borderRadius: 100, padding: "7px 16px", color: UI, cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>
+            <Plus size={15} />
+          </button>
+        </div>}
+      </div>
+      {!hasBuckets && (
+        <div style={{ ...G.card, borderRadius: 22, padding: 24, textAlign: "center", color: "var(--sub2)", fontSize: 14 }}>No buckets yet. Create one to organize savings.</div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {activeBuckets.map((bucket, idx) => {
+          const pct = bucket.goal > 0 ? Math.min(100, ((bucket.allocated || 0) / bucket.goal) * 100) : 0;
+          const BI = getBI(bucket.icon);
+          return (
+            <div key={bucket.id} style={{ ...G.glass, borderRadius: 22, padding: "16px 18px", cursor: reordering ? "default" : "pointer", transition: "transform 0.15s" }}
+              onClick={() => { if (!reordering) setActiveBucket(bucket.id); }}
+              onMouseEnter={e => { if (!reordering) e.currentTarget.style.transform = "scale(1.01)"; }}
+              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {reordering && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, marginRight: 2 }}>
+                    <button onClick={e => { e.stopPropagation(); moveBucket(idx, -1); }} disabled={idx === 0}
+                      style={{ background: "none", border: "none", cursor: idx === 0 ? "default" : "pointer", padding: 2, opacity: idx === 0 ? 0.2 : 1 }}>
+                      <ChevronUp size={16} color="var(--sub)" />
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); moveBucket(idx, 1); }} disabled={idx === activeBuckets.length - 1}
+                      style={{ background: "none", border: "none", cursor: idx === activeBuckets.length - 1 ? "default" : "pointer", padding: 2, opacity: idx === activeBuckets.length - 1 ? 0.2 : 1 }}>
+                      <ChevronDown size={16} color="var(--sub)" />
+                    </button>
+                  </div>
+                )}
+                <div style={{ width: 40, height: 40, borderRadius: 14, background: UI_LIGHT, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "0.5px solid rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <BI size={18} color={UI} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{bucket.name}</span>
+                    {(bucket.interestRate || 0) > 0 && (
+                      <span style={{ fontSize: 9, fontWeight: 700, color: "#AF52DE", background: "rgba(175,82,222,0.1)", padding: "2px 6px", borderRadius: 6 }}>{bucket.interestRate}%</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, color: (bucket.allocated || 0) < 0 ? "#D64045" : "var(--sub)", marginTop: 1 }}>
+                    {fmt(bucket.allocated || 0)}{bucket.goal > 0 ? ` of ${fmt(bucket.goal)}` : ""}
+                  </div>
+                </div>
+                {!reordering && (
+                  <ChevronRight size={16} color="var(--sub3)" />
+                )}
+              </div>
+              {bucket.goal > 0 && !reordering && (
+                <div style={{ marginTop: 10, height: 4, borderRadius: 2, background: "var(--empty-bg)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: UI, borderRadius: 2, boxShadow: `0 0 8px ${UI}40`, transition: "width 0.4s" }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+
+    {/* Recurring */}
+    {!childMode && <div style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3 }}>Recurring</h3>
+        <button onClick={() => {
+          if (activeBuckets.length === 0) { setPendingRecurring(true); setShowNoBucketPrompt(true); return; }
+          setRCents(0); setRDesc(""); setRType("add"); setRFreq("Weekly"); setRDay(new Date().getDay()); setRMode("single"); setRBucket(activeBuckets[0]?.id || ""); setRSplitEdits(zeroEdits()); setShowRecurring(true);
+        }} style={{ ...G.glass, borderRadius: 100, padding: "7px 16px", color: UI, cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>
+          <Plus size={15} />
+        </button>
+      </div>
+      {(child.recurring || []).length === 0 && (
+        <div style={{ ...G.card, borderRadius: 22, padding: 24, textAlign: "center", color: "var(--sub2)", fontSize: 14 }}>Set up recurring deposits or withdrawals.</div>
+      )}
+      {(child.recurring || []).map(r => {
+        const rb = r.bucketId ? (child.buckets || []).find(b => b.id === r.bucketId) : null;
+        const isRemove = r.recType === "remove";
+        return (
+          <div key={r.id} onClick={() => openEditRec(r)}
+            style={{ ...G.card, borderRadius: 20, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 8, cursor: "pointer", transition: "background 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.7)"}
+            onMouseLeave={e => e.currentTarget.style.background = G.card.background}
+          >
+            <div style={{ width: 36, height: 36, borderRadius: 12, background: isRemove ? "rgba(214,64,69,0.1)" : "rgba(52,199,89,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}><Repeat size={15} color={isRemove ? "#D64045" : "#34C759"} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{r.description}</span>
+                {r.autoSplit && <span style={{ fontSize: 9, fontWeight: 700, color: UI, background: UI_LIGHT, padding: "1px 6px", borderRadius: 4 }}>SPLIT</span>}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--sub)" }}>{r.frequency}{r.dayLabel ? ` \u00B7 ${r.dayLabel}` : ""}{rb ? ` \u00B7 ${rb.name}` : ""}</div>
+            </div>
+            <span style={{ fontSize: 16, fontWeight: 700, color: isRemove ? "#D64045" : "#34C759" }}>{isRemove ? "-" : "+"}{fmt(r.amount)}</span>
+            <ChevronRight size={14} color="var(--sub3)" style={{ flexShrink: 0 }} />
+          </div>
+        );
+      })}
+    </div>}
+
+    {/* History */}
+    <button onClick={() => setHistoryOpen(!historyOpen)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "0 0 10px", cursor: "pointer", fontFamily: "inherit" }}>
+      <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3 }}>All History</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 13, color: "var(--sub)", fontWeight: 600 }}>{sortedTx.length} transaction{sortedTx.length !== 1 ? "s" : ""}</span>
+        <ChevronDown size={20} color="var(--sub)" style={{ transform: historyOpen ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.25s" }} />
+      </div>
+    </button>
+    {historyOpen && <TxList transactions={sortedTx} buckets={child.buckets} color={{ primary: UI, light: UI_LIGHT }} onEdit={childMode ? undefined : openEditTx} deletedBuckets={child.deletedBuckets} />}
+  </div>
+  )}
+
+  {/* ═══ MODALS ═══ */}
+  {renderTxModal()}
+  {renderTransferModal()}
+
+  <Modal open={showNoBucketPrompt} onClose={() => { setShowNoBucketPrompt(false); setPendingTxType(null); setPendingRecurring(false); setPendingReturn(null); }} title="Create a Bucket First">
+    <div style={{ textAlign: "center", padding: "8px 0 16px" }}>
+      <div style={{ width: 56, height: 56, borderRadius: 18, background: UI_LIGHT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+        <PiggyBank size={28} color={UI} />
+      </div>
+      <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 4px", fontWeight: 600 }}>You need at least one bucket</p>
+      <p style={{ color: "var(--sub)", fontSize: 14, margin: "0 0 20px" }}>Create a bucket to start tracking where the money goes.</p>
+    </div>
+    <Btn onClick={() => { setShowNoBucketPrompt(false); setBName("Spending"); setBGoalCents(0); setBNameErr(""); setBIcon("spending"); setShowBucket(true); }} full color={UI}>
+      <Plus size={18} /> Create Bucket
+    </Btn>
+  </Modal>
+
+  <Modal open={!!showNeedBucketPrompt} onClose={() => {
+    const ret = showNeedBucketPrompt;
+    setShowNeedBucketPrompt(null);
+    if (ret === "tx") setShowTx(true);
+    else if (ret === "recurring") setShowRecurring(true);
+  }} title="Another Bucket Needed">
+    <div style={{ textAlign: "center", marginBottom: 18 }}>
+      <div style={{ width: 56, height: 56, borderRadius: 18, background: UI_LIGHT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+        <Sliders size={28} color={UI} />
+      </div>
+      <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 4px", fontWeight: 600 }}>Split requires two or more buckets</p>
+      <p style={{ color: "var(--sub)", fontSize: 14, margin: "0 0 20px" }}>Create another bucket so you can split deposits across them.</p>
+    </div>
+    <Btn onClick={() => {
+      const ret = showNeedBucketPrompt;
+      setShowNeedBucketPrompt(null);
+      setPendingReturn(ret);
+      setBName("Spending"); setBGoalCents(0); setBNameErr(""); setBIcon("spending"); setShowBucket(true);
+    }} full color={UI}>
+      <Plus size={18} /> Create Bucket
+    </Btn>
+  </Modal>
+
+  {renderDeleteTxModal()}
+
+  {renderEditSplitModals()}
+
+  <Modal open={showBucket} onClose={() => {
+    setShowBucket(false);
+    // Reopen the original modal if user cancels bucket creation
+    if (pendingReturn === "tx") { setShowTx(true); }
+    else if (pendingReturn === "recurring") { setShowRecurring(true); }
+    // editRec: showEditRec is still set, modal reappears automatically
+    setPendingReturn(null); setPendingTxType(null); setPendingRecurring(false);
+  }} title="New Bucket">
+    <IconPicker value={bIcon} onChange={setBIcon} color={{ primary: UI, light: UI_LIGHT }} onSelect={label => { const labels = ICON_LIST.map(i => i.label); if (!bName || labels.includes(bName)) setBName(label); }} />
+    <Field label="Name" value={bName} onChange={v => { setBName(v); setBNameErr(""); }} placeholder="Savings, Toy Fund, Church..." error={bNameErr} onClear={() => { setBName(""); setBNameErr(""); }} />
+    <MoneyField label="Goal amount (optional)" cents={bGoalCents} onChange={setBGoalCents} />
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: bGrowth ? 12 : 0 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: "var(--sub)" }}>Enable Growth</label>
+        <button onClick={() => setBGrowth(!bGrowth)} style={{
+          width: 50, height: 30, borderRadius: 15, border: "none", cursor: "pointer", padding: 2, transition: "background 0.25s",
+          background: bGrowth ? "#AF52DE" : "rgba(120,120,128,0.16)", display: "flex", alignItems: "center",
+        }}>
+          <div style={{ width: 26, height: 26, borderRadius: 13, background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.15)", transition: "transform 0.25s", transform: bGrowth ? "translateX(20px)" : "translateX(0)" }} />
+        </button>
+      </div>
+      {bGrowth && (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <Pill selected={bRatePeriod === "monthly"} onClick={() => setBRatePeriod("monthly")} color="#AF52DE">Monthly</Pill>
+            <Pill selected={bRatePeriod === "annual"} onClick={() => setBRatePeriod("annual")} color="#AF52DE">Annual</Pill>
+          </div>
+          <RateField label="Rate" tenths={bRateTenths} onChange={setBRateTenths} suffix={bRatePeriod === "annual" ? "APR" : "/mo"} />
+          <p style={{ fontSize: 11, color: "var(--sub2)", marginTop: -8, marginBottom: 10 }}>{bRatePeriod === "monthly" ? "This rate is applied each month to the bucket's positive balance." : "Annual rate divided by 12 and applied monthly to positive balances."}</p>
+        </>
+      )}
+    </div>
+    <Btn onClick={addBucket} disabled={!bName.trim()} full color={UI}><Check size={18} /> Create Bucket</Btn>
+  </Modal>
+
+  {renderEditBucketModals()}
+
+  <Modal open={showRecurring} onClose={() => setShowRecurring(false)} title="New Recurring">
+    {(() => { const rCol = rType === "add" ? "#34C759" : "#D64045"; return (<>
+    <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <Pill selected={rType === "add"} onClick={() => { setRType("add"); setRMode("single"); }} color="#34C759"><TrendingUp size={13} /> Deposit</Pill>
+      <Pill selected={rType === "remove"} onClick={() => { setRType("remove"); setRMode("single"); }} color="#D64045"><TrendingDown size={13} /> Withdraw</Pill>
+    </div>
+    <Field label="Description" value={rDesc} onChange={setRDesc} placeholder={rType === "add" ? "Allowance, chore pay..." : "Subscription, fee..."} />
+    <MoneyField label="Amount" cents={rCents} onChange={setRCents} />
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Frequency</label>
+      <div style={{ display: "flex", gap: 6 }}>
+        {FREQ.map(f => <Pill key={f} selected={rFreq === f} onClick={() => { setRFreq(f); setRDay(f === "Weekly" ? new Date().getDay() : new Date().getDate()); }} color={rCol}>{f}</Pill>)}
+      </div>
+    </div>
+
+    {rFreq === "Weekly" && (
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Day of Week</label>
+        <div style={{ display: "flex", gap: 4 }}>
+          {DAYS.map((d, i) => (
+            <button key={d} onClick={() => setRDay(i)} style={{
+              flex: 1, padding: "10px 0", borderRadius: 12, border: "none", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", transition: "all 0.2s",
+              background: rDay === i ? rCol : "rgba(120,120,128,0.08)", color: rDay === i ? "#fff" : "var(--text2)",
+              boxShadow: rDay === i ? `0 2px 8px ${rCol}44` : "none",
+            }}>{d}</button>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {rFreq === "Monthly" && (
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Day of Month</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+            <button key={d} onClick={() => setRDay(d)} style={{
+              padding: "9px 0", borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", transition: "all 0.2s",
+              background: rDay === d ? rCol : "rgba(120,120,128,0.06)", color: rDay === d ? "#fff" : "var(--text2)",
+              boxShadow: rDay === d ? `0 2px 6px ${rCol}44` : "none",
+            }}>{d}</button>
+          ))}
+        </div>
+        <p style={{ fontSize: 11, color: "var(--sub2)", marginTop: 6 }}>If a month has fewer days, the last day of the month will be used.</p>
+      </div>
+    )}
+    {hasBuckets && (
+      <>
+        {rType === "add" && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Allocation</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Pill selected={rMode === "single"} onClick={() => { setRMode("single"); setRBucket(activeBuckets[0]?.id || ""); }} color={rCol}>Single Bucket</Pill>
+              <Pill selected={rMode === "split"} onClick={() => { if (multiB) setRMode("split"); else { setShowRecurring(false); setShowNeedBucketPrompt("recurring"); } }} color={rCol}><Sliders size={12} /> Split</Pill>
+            </div>
+          </div>
+        )}
+        {(rMode === "single" || rType === "remove") && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 5 }}>{rType === "add" ? "Bucket" : "From Bucket"}</label>
+            <select value={rBucket} onChange={e => setRBucket(e.target.value)} style={{ ...G.inp, width: "100%", fontSize: 15, fontWeight: 600, color: "var(--text)", fontFamily: FONT, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32, cursor: "pointer" }}>
+              {activeBuckets.map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+            </select>
+          </div>
+        )}
+        {rMode === "split" && rType === "add" && (
+          <SplitConfig buckets={activeBuckets} edits={rSplitEdits} setEdits={setRSplitEdits} color={{ primary: rCol, light: "rgba(52,199,89,0.08)" }} amountCents={rCents} splitMode={rSplitMode} setSplitMode={setRSplitMode} />
+        )}
+      </>
+    )}
+    <Btn onClick={addRec} disabled={rCents <= 0 || (rMode === "split" && rSplitTotal !== 100)} full color={rCol}><Check size={18} /> {rType === "add" ? "Save Recurring Deposit" : "Save Recurring Withdrawal"}</Btn>
+    </>); })()}
+  </Modal>
+
+  {/* ═══ EDIT PROFILE ═══ */}
+  <Modal open={showEditProfile} onClose={() => setShowEditProfile(false)} title="Edit Account">
+    <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+      <div onClick={() => epFileRef.current?.click()} style={{ position: "relative", cursor: "pointer" }}>
+        {epPhoto
+          ? <img src={epPhoto} alt="" style={{ width: 76, height: 76, borderRadius: "50%", objectFit: "cover", border: `2.5px solid ${UI}` }} />
+          : <div style={{ width: 76, height: 76, borderRadius: "50%", background: `linear-gradient(145deg, ${(COLORS.find(x => x.name === epColor) || COLORS[0]).primary}, ${(COLORS.find(x => x.name === epColor) || COLORS[0]).dark})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 30, fontWeight: 700 }}>{epName?.charAt(0)?.toUpperCase() || "?"}</div>
+        }
+        <div style={{ position: "absolute", bottom: -3, right: -3, background: UI, borderRadius: 10, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}><Camera size={11} color="#fff" /></div>
+      </div>
+      <input ref={epFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleEpFile} />
+    </div>
+    <Field label="Name" value={epName} onChange={setEpName} placeholder="Child's name" />
+    <Field label="Parent PIN (4 digits, enables child mode)" value={epPin} onChange={v => { if (/^\d{0,4}$/.test(v)) setEpPin(v); }} type="tel" placeholder="Leave blank to disable" />
+    <div style={{ marginBottom: 18 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 8 }}>Color</label>
+      <div style={{ display: "flex", gap: 10 }}>
+        {COLORS.map(cl => <button key={cl.name} onClick={() => setEpColor(cl.name)} style={{ width: 40, height: 40, borderRadius: 14, background: `linear-gradient(145deg, ${cl.primary}, ${cl.dark})`, border: epColor === cl.name ? "3px solid var(--text)" : "3px solid transparent", cursor: "pointer", outline: epColor === cl.name ? "2px solid rgba(255,255,255,0.8)" : "none" }} />)}
+      </div>
+    </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, padding: "10px 0", borderTop: "0.5px solid var(--inp-border)" }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>Chores</div>
+        <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 1 }}>Show chore list for this child</div>
+      </div>
+      <button onClick={() => setEpChores(!epChores)} style={{
+        width: 51, height: 31, borderRadius: 16, border: "none", cursor: "pointer", padding: 2,
+        background: epChores ? "#34C759" : "rgba(120,120,128,0.16)", display: "flex", alignItems: "center",
+        transition: "background 0.3s"
+      }}>
+        <div style={{ width: 27, height: 27, borderRadius: 14, background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.15)", transition: "transform 0.25s", transform: epChores ? "translateX(20px)" : "translateX(0)" }} />
+      </button>
+    </div>
+    <div style={{ display: "flex", gap: 10 }}>
+      <Btn onClick={() => { setShowEditProfile(false); setShowDeleteAccount(true); }} variant="outline" color="#D64045" full style={{ flex: 1 }}><Trash2 size={15} /> Delete Account</Btn>
+      <Btn onClick={saveProfile} disabled={!epName.trim()} color={UI} full style={{ flex: 1 }}><Check size={15} /> Save</Btn>
+    </div>
+  </Modal>
+
+  <Modal open={showDeleteAccount} onClose={() => setShowDeleteAccount(false)} title="Delete Account">
+    <div style={{ textAlign: "center", marginBottom: 18 }}>
+      <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(214,64,69,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+        <Trash2 size={28} color="#D64045" />
+      </div>
+      <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 4px", fontWeight: 600 }}>Delete {child.name}'s account?</p>
+      <p style={{ color: "var(--sub)", fontSize: 14, margin: 0 }}>This will permanently remove the account and all transaction history. This cannot be undone.</p>
+    </div>
+    <div style={{ display: "flex", gap: 10 }}>
+      <Btn onClick={() => setShowDeleteAccount(false)} variant="outline" color="var(--sub)" full>Cancel</Btn>
+      <Btn onClick={() => { setShowDeleteAccount(false); onDelete(child.id); }} color="#D64045" full><Trash2 size={15} /> Delete</Btn>
+    </div>
+  </Modal>
+
+
+
+  {/* ═══ EDIT RECURRING ═══ */}
+  <Modal open={!!showEditRec && !showDeleteRec} onClose={() => setShowEditRec(null)} title="Edit Recurring">
+    {showEditRec && (() => { const erCol = erType === "add" ? "#34C759" : "#D64045"; return (
+      <>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <Pill selected={erType === "add"} onClick={() => setErType("add")} color="#34C759"><TrendingUp size={13} /> Deposit</Pill>
+          <Pill selected={erType === "remove"} onClick={() => setErType("remove")} color="#D64045"><TrendingDown size={13} /> Withdraw</Pill>
+        </div>
+        <Field label="Description" value={erDesc} onChange={setErDesc} placeholder={erType === "add" ? "Allowance, chore pay..." : "Subscription, fee..."} />
+        <MoneyField label="Amount" cents={erCents} onChange={setErCents} />
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Frequency</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            {FREQ.map(f => <Pill key={f} selected={erFreq === f} onClick={() => { setErFreq(f); setErDay(f === "Weekly" ? new Date().getDay() : new Date().getDate()); }} color={erCol}>{f}</Pill>)}
+          </div>
+        </div>
+        {erFreq === "Weekly" && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Day of Week</label>
+            <div style={{ display: "flex", gap: 4 }}>
+              {DAYS.map((d, i) => (
+                <button key={d} onClick={() => setErDay(i)} style={{
+                  flex: 1, padding: "10px 0", borderRadius: 12, border: "none", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", transition: "all 0.2s",
+                  background: erDay === i ? erCol : "rgba(120,120,128,0.08)", color: erDay === i ? "#fff" : "var(--text2)",
+                  boxShadow: erDay === i ? `0 2px 8px ${erCol}44` : "none",
+                }}>{d}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {erFreq === "Monthly" && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Day of Month</label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+              {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                <button key={d} onClick={() => setErDay(d)} style={{
+                  padding: "9px 0", borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", transition: "all 0.2s",
+                  background: erDay === d ? erCol : "rgba(120,120,128,0.06)", color: erDay === d ? "#fff" : "var(--text2)",
+                  boxShadow: erDay === d ? `0 2px 6px ${erCol}44` : "none",
+                }}>{d}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeBuckets.length > 0 && (
+          <>
+            {erType === "add" && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 6 }}>Allocation</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Pill selected={erMode === "single"} onClick={() => { setErMode("single"); setErBucket(activeBuckets[0]?.id || ""); }} color={erCol}>Single Bucket</Pill>
+                  <Pill selected={erMode === "split"} onClick={() => { if (multiB) setErMode("split"); else { setShowNeedBucketPrompt("editRec"); } }} color={erCol}><Sliders size={12} /> Split</Pill>
+                </div>
+              </div>
+            )}
+            {(erMode === "single" || erType === "remove") && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 5 }}>{erType === "add" ? "Bucket" : "From Bucket"}</label>
+                <select value={erBucket} onChange={e => setErBucket(e.target.value)} style={{ ...G.inp, width: "100%", fontSize: 15, fontWeight: 600, color: "var(--text)", fontFamily: FONT, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32, cursor: "pointer" }}>
+                  {activeBuckets.map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+                </select>
+              </div>
+            )}
+            {erMode === "split" && erType === "add" && (
+              <SplitConfig buckets={activeBuckets} edits={erSplitEdits} setEdits={setErSplitEdits} color={{ primary: erCol, light: erCol === "#34C759" ? "rgba(52,199,89,0.08)" : "rgba(214,64,69,0.08)" }} amountCents={erCents} splitMode={erSplitMode} setSplitMode={setErSplitMode} />
+            )}
+          </>
+        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn onClick={() => setShowDeleteRec(showEditRec)} variant="outline" color="#D64045" full style={{ flex: 1 }}><Trash2 size={15} /> Delete</Btn>
+          <Btn onClick={saveEditRec} disabled={erCents <= 0 || (erMode === "split" && erType === "add" && erSplitTotal !== 100)} color={erCol} full style={{ flex: 1 }}><Check size={15} /> Save</Btn>
+        </div>
+      </>
+    ); })()}
+  </Modal>
+
+  <Modal open={!!showDeleteRec} onClose={() => setShowDeleteRec(null)} title="Delete Recurring">
+    <p style={{ color: "var(--text2)", fontSize: 15, margin: "0 0 18px" }}>
+      Delete "{showDeleteRec?.description}" ({showDeleteRec?.frequency})? This will stop future {showDeleteRec?.recType === "remove" ? "withdrawals" : "deposits"}.
+    </p>
+    <div style={{ display: "flex", gap: 10 }}>
+      <Btn onClick={() => setShowDeleteRec(null)} variant="outline" color="var(--sub)" full>Cancel</Btn>
+      <Btn onClick={() => delRec(showDeleteRec)} color="#D64045" full><Trash2 size={15} /> Delete</Btn>
+    </div>
+  </Modal>
+
+  {/* ═══ CHORES ═══ */}
+  <Modal open={showChore} onClose={() => { setShowChore(false); setEditChore(null); }} title={editChore ? "Edit Chore" : "New Chore"}>
+    <Field label="Chore name" value={choreName} onChange={setChoreName} placeholder="Make bed, walk dog..." />
+    <MoneyField label="Payout" cents={choreCents} onChange={setChoreCents} />
+    {hasBuckets && (
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--sub)", marginBottom: 5 }}>Deposit to</label>
+        <select value={choreBucket} onChange={e => setChoreBucket(e.target.value)} style={{ ...G.inp, width: "100%", fontSize: 15, fontWeight: 600, color: "var(--text)", fontFamily: FONT, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32, cursor: "pointer" }}>
+          {activeBuckets.map(b => <option key={b.id} value={b.id}>{b.name} ({fmt(b.allocated || 0)})</option>)}
+        </select>
+      </div>
+    )}
+    {editChore ? (
+      <div style={{ display: "flex", gap: 10 }}>
+        <Btn onClick={() => deleteChore(editChore.id)} variant="outline" color="#D64045" full style={{ flex: 1 }}><Trash2 size={15} /> Delete</Btn>
+        <Btn onClick={saveChore} disabled={!choreName.trim() || choreCents <= 0} color="#34C759" full style={{ flex: 1 }}><Check size={15} /> Save</Btn>
+      </div>
+    ) : (
+      <Btn onClick={saveChore} disabled={!choreName.trim() || choreCents <= 0} full color="#34C759"><Plus size={16} /> Add Chore</Btn>
+    )}
+  </Modal>
+
+  {/* Chore confirm */}
+  {confirmChore && (() => {
+    const cbkt = (child.buckets || []).find(b => b.id === confirmChore.bucketId);
+    return (
+      <Modal open={true} onClose={() => setConfirmChore(null)} title="Complete Chore?">
+        <div style={{ textAlign: "center", padding: "4px 0 16px" }}>
+          <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(52,199,89,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+            <Check size={28} color="#34C759" />
+          </div>
+          <p style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", margin: "0 0 4px" }}>{confirmChore.name}</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: "#34C759", margin: "0 0 4px" }}>+{fmt(confirmChore.amount)}</p>
+          {cbkt && <p style={{ fontSize: 13, color: "var(--sub)", margin: 0 }}>Deposits to {cbkt.name}</p>}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn onClick={() => setConfirmChore(null)} variant="outline" color="var(--sub)" full style={{ flex: 1 }}>Cancel</Btn>
+          <Btn onClick={() => { completeChore(confirmChore); setConfirmChore(null); }} color="#34C759" full style={{ flex: 1 }}><Check size={15} /> Done!</Btn>
+        </div>
+      </Modal>
+    );
+  })()}
+
+  {/* Chore toast */}
+  {choreToast && (
+    <div key={choreToast.key} style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 250, background: "#34C759", color: "#fff", padding: "10px 20px", borderRadius: 100, fontSize: 14, fontWeight: 700, boxShadow: "0 4px 20px rgba(52,199,89,0.4)", display: "flex", alignItems: "center", gap: 8, animation: "celebPop 0.3s ease-out", fontFamily: FONT }}>
+      <Check size={16} /> {choreToast.text}
+    </div>
+  )}
+
+  {/* Import toast */}
+  {importToast && (
+    <div key={importToast.key} style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 250, background: importToast.err ? "#D64045" : "#007AFF", color: "#fff", padding: "10px 20px", borderRadius: 100, fontSize: 14, fontWeight: 700, boxShadow: `0 4px 20px ${importToast.err ? "rgba(214,64,69,0.4)" : "rgba(0,122,255,0.4)"}`, display: "flex", alignItems: "center", gap: 8, animation: "celebPop 0.3s ease-out", fontFamily: FONT }}>
+      {importToast.err ? <X size={16} /> : <Check size={16} />} {importToast.text}
+    </div>
+  )}
+
+  {/* ═══ SETTINGS ═══ */}
+  <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Settings">
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "0.5px solid var(--inp-border)" }}>
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>Dark Mode</div>
+        <div style={{ fontSize: 13, color: "var(--sub)", marginTop: 2 }}>Switch to a darker appearance</div>
+      </div>
+      <button onClick={onToggleDark} style={{
+        width: 51, height: 31, borderRadius: 16, border: "none", cursor: "pointer", padding: 2,
+        background: dark ? "#34C759" : "rgba(120,120,128,0.16)", display: "flex", alignItems: "center",
+        transition: "background 0.3s"
+      }}>
+        <div style={{ width: 27, height: 27, borderRadius: 14, background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.15)", transition: "transform 0.25s", transform: dark ? "translateX(20px)" : "translateX(0)" }} />
+      </button>
+    </div>
+    <div style={{ padding: "16px 0 4px" }}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>Data Backup</div>
+      <div style={{ fontSize: 13, color: "var(--sub)", marginBottom: 14 }}>Export a backup file or restore from one. Keeps your data safe if the browser clears storage.</div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <Btn onClick={() => { onExport(); setShowSettings(false); }} variant="outline" color={UI} full style={{ flex: 1 }}><Download size={15} /> Export</Btn>
+        <Btn onClick={() => importRef.current?.click()} color={UI} full style={{ flex: 1 }}><Upload size={15} /> Import</Btn>
+      </div>
+      <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            if (parsed.children) {
+              onImport(parsed);
+              setImportToast({ text: `Restored ${parsed.children.length} account${parsed.children.length !== 1 ? "s" : ""}`, key: Date.now() });
+              setTimeout(() => setImportToast(null), 3000);
+              setShowSettings(false);
+            } else {
+              setImportToast({ text: "Invalid backup file", key: Date.now(), err: true });
+              setTimeout(() => setImportToast(null), 3000);
+            }
+          } catch {
+            setImportToast({ text: "Could not read file", key: Date.now(), err: true });
+            setTimeout(() => setImportToast(null), 3000);
+          }
+        };
+        reader.readAsText(f);
+        e.target.value = "";
+      }} />
+    </div>
+  </Modal>
+
+  {/* ═══ PIN PROMPT ═══ */}
+  <Modal open={showPinPrompt} onClose={() => setShowPinPrompt(false)} title="Enter Parent PIN">
+    <div style={{ textAlign: "center", marginBottom: 16 }}>
+      <div style={{ width: 56, height: 56, borderRadius: 18, background: UI_LIGHT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+        <Lock size={28} color={UI} />
+      </div>
+      <p style={{ color: "var(--sub)", fontSize: 14, margin: 0 }}>Enter your 4-digit PIN to unlock parent controls.</p>
+    </div>
+    <Field label="PIN" value={pinInput} onChange={v => { if (/^\d{0,4}$/.test(v)) { setPinInput(v); setPinErr(""); } }} type="tel" placeholder="Enter PIN" error={pinErr} />
+    <Btn onClick={() => {
+      if (pinInput === child.pin) { setChildMode(false); setShowPinPrompt(false); setPinInput(""); }
+      else { setPinErr("Incorrect PIN"); setPinInput(""); }
+    }} disabled={pinInput.length !== 4} full color={UI}><Unlock size={16} /> Unlock</Btn>
+  </Modal>
+
+  {/* ═══ GOAL CELEBRATION ═══ */}
+  {celebration && (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setCelebration(null)}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
+      {/* Confetti particles */}
+      {Array.from({ length: 30 }).map((_, i) => (
+        <div key={i} style={{
+          position: "absolute", top: 0, left: `${5 + Math.random() * 90}%`,
+          width: 8 + Math.random() * 8, height: 8 + Math.random() * 8,
+          borderRadius: Math.random() > 0.5 ? "50%" : 2,
+          background: ["#FF6F91", "#007AFF", "#34C759", "#FF9500", "#AF52DE", "#5AC8FA", "#FFD700"][i % 7],
+          animation: `confettiFall ${2 + Math.random() * 2}s ease-in ${Math.random() * 0.8}s both`,
+        }} />
+      ))}
+      <div style={{ position: "relative", background: "#fff", borderRadius: 28, padding: "36px 32px", textAlign: "center", maxWidth: 300, boxShadow: "0 20px 60px rgba(0,0,0,0.15)", animation: "celebPop 0.5s ease-out" }}>
+        <div style={{ fontSize: 56, marginBottom: 12 }}>🎉</div>
+        <h2 style={{ margin: "0 0 8px", fontSize: 24, fontWeight: 800, color: "var(--text)", letterSpacing: -0.3 }}>Goal Reached!</h2>
+        <p style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 600, color: "var(--text2)" }}>{celebration.name}</p>
+        <p style={{ margin: "0 0 24px", fontSize: 28, fontWeight: 800, color: "#34C759" }}>{fmt(celebration.amount)}</p>
+        <Btn onClick={() => setCelebration(null)} full color="#34C759"><Star size={16} /> Awesome!</Btn>
+      </div>
+    </div>
+  )}
+
+  {epShowCropper && epRawPhoto && (
+    <ImageCropper
+      src={epRawPhoto}
+      onCrop={(cropped) => { setEpPhoto(cropped); setEpShowCropper(false); setEpRawPhoto(null); }}
+      onCancel={() => { setEpShowCropper(false); setEpRawPhoto(null); }}
+    />
+  )}
+</div>
+```
+
+);
+}
+
+/* ═══════════════════ APP ═══════════════════ */
+function KiddoBank() {
+const [data, setData] = useState({ children: [] });
+const [loaded, setLoaded] = useState(false);
+const [active, setActive] = useState(null);
+const [dark, setDark] = useState(false);
+const [wsName, setWsName] = useState(””);
+const [wsColor, setWsColor] = useState(COLORS[0].name);
+const [wsPhoto, setWsPhoto] = useState(null);
+const [wsRawPhoto, setWsRawPhoto] = useState(null);
+const [wsShowCropper, setWsShowCropper] = useState(false);
+const [wsOpen, setWsOpen] = useState(false);
+const [wsChores, setWsChores] = useState(true);
+const wsFileRef = useRef();
+
+useEffect(() => { load().then(d => { setData(d); setDark(!!d.dark); setLoaded(true); }); }, []);
+useEffect(() => { if (loaded) save(data); }, [data, loaded]);
+const toggleDark = () => { const nd = !dark; setDark(nd); setData(p => ({ …p, dark: nd })); };
+
+const exportData = () => {
+const json = JSON.stringify(data, null, 2);
+const blob = new Blob([json], { type: “application/json” });
+const url = URL.createObjectURL(blob);
+const a = document.createElement(“a”);
+a.href = url;
+a.download = `kiddobank-backup-${new Date().toISOString().slice(0, 10)}.json`;
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+URL.revokeObjectURL(url);
+};
+
+const importData = (parsed) => {
+setData(parsed);
+setDark(!!parsed.dark);
+setActive(null);
+};
+
+if (!loaded) return (
+<div style={{ minHeight: “100vh”, display: “flex”, alignItems: “center”, justifyContent: “center”, background: “#f5f5fa”, fontFamily: FONT }}>
+<style>{LG_CSS}{`@keyframes spin{to{transform:rotate(360deg)}} :root { ${THEME_VARS_LIGHT} }`}</style>
+<div style={{ …G.glass, borderRadius: 28, padding: “32px 40px”, textAlign: “center” }}>
+<Coins size={36} color=”#007AFF” style={{ animation: “spin 1.5s linear infinite”, marginBottom: 12 }} />
+<div style={{ fontSize: 15, fontWeight: 600, color: “var(–sub)” }}>Loading…</div>
+</div>
+</div>
+);
+
+const sel = data.children.find(c => c.id === active) || data.children[0] || null;
+const del = (cid) => { setData(p => ({ …p, children: p.children.filter(c => c.id !== cid) })); setActive(null); };
+const addChild = (ch) => { setData(p => ({ …p, children: […p.children, ch] })); setActive(ch.id); };
+
+// No children: show empty state with add child modal
+if (!sel) {
+const wsHandleFile = (e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => { setWsRawPhoto(ev.target.result); setWsShowCropper(true); }; r.readAsDataURL(f); e.target.value = “”; };
+return (
+<div style={{ minHeight: “100vh”, background: “var(–bg)”, fontFamily: FONT }}>
+<style>{LG_CSS}{`:root { ${dark ? THEME_VARS_DARK : THEME_VARS_LIGHT} }`}</style>
+<div style={{ display: “flex”, flexDirection: “column”, alignItems: “center”, justifyContent: “center”, minHeight: “80vh”, textAlign: “center”, padding: 20 }}>
+<PiggyBank size={64} strokeWidth={1.5} color=“var(–sub3)” style={{ marginBottom: 16 }} />
+<p style={{ fontSize: 17, fontWeight: 600, color: “var(–sub)”, margin: “0 0 6px” }}>Welcome to KiddoBank</p>
+<p style={{ fontSize: 14, color: “var(–sub2)”, margin: “0 0 24px” }}>Add your first child to get started.</p>
+<Btn onClick={() => { setWsName(””); setWsColor(COLORS[0].name); setWsPhoto(null); setWsChores(true); setWsOpen(true); }} color=”#007AFF”><Plus size={18} /> Add Child</Btn>
+</div>
+<Modal open={wsOpen} onClose={() => setWsOpen(false)} title=“Add Child”>
+<div style={{ display: “flex”, justifyContent: “center”, marginBottom: 16 }}>
+<div onClick={() => wsFileRef.current?.click()} style={{ position: “relative”, cursor: “pointer” }}>
+{wsPhoto ? <img src={wsPhoto} alt=”” style={{ width: 76, height: 76, borderRadius: “50%”, objectFit: “cover”, border: `2.5px solid #007AFF` }} />
+: <div style={{ width: 76, height: 76, borderRadius: “50%”, background: “var(–empty-bg)”, border: “2px dashed rgba(120,120,128,0.2)”, display: “flex”, alignItems: “center”, justifyContent: “center” }}><Camera size={26} color="var(--sub)" /></div>}
+<div style={{ position: “absolute”, bottom: -3, right: -3, background: “#007AFF”, borderRadius: 10, width: 22, height: 22, display: “flex”, alignItems: “center”, justifyContent: “center” }}><Camera size={11} color="#fff" /></div>
+</div>
+<input ref={wsFileRef} type=“file” accept=“image/*” style={{ display: “none” }} onChange={wsHandleFile} />
+</div>
+<Field label="Name" value={wsName} onChange={setWsName} placeholder="Child's name" />
+<div style={{ marginBottom: 14 }}>
+<label style={{ display: “block”, fontSize: 13, fontWeight: 600, color: “var(–sub)”, marginBottom: 6 }}>Color</label>
+<div style={{ display: “flex”, gap: 8, flexWrap: “wrap” }}>
+{COLORS.map(cl => (
+<button key={cl.name} onClick={() => setWsColor(cl.name)}
+style={{ width: 32, height: 32, borderRadius: “50%”, background: `linear-gradient(145deg, ${cl.primary}, ${cl.dark})`, border: wsColor === cl.name ? “2.5px solid #007AFF” : “2.5px solid transparent”, cursor: “pointer”, transition: “border 0.2s” }} />
+))}
+</div>
+</div>
+<div style={{ display: “flex”, alignItems: “center”, justifyContent: “space-between”, marginBottom: 18, padding: “10px 0”, borderTop: “0.5px solid var(–inp-border)” }}>
+<div>
+<div style={{ fontSize: 15, fontWeight: 600, color: “var(–text)” }}>Enable Chores</div>
+<div style={{ fontSize: 12, color: “var(–sub)”, marginTop: 1 }}>Let this child earn money from tasks</div>
+</div>
+<button onClick={() => setWsChores(!wsChores)} style={{
+width: 51, height: 31, borderRadius: 16, border: “none”, cursor: “pointer”, padding: 2,
+background: wsChores ? “#34C759” : “rgba(120,120,128,0.16)”, display: “flex”, alignItems: “center”,
+transition: “background 0.3s”
+}}>
+<div style={{ width: 27, height: 27, borderRadius: 14, background: “#fff”, boxShadow: “0 1px 4px rgba(0,0,0,0.15)”, transition: “transform 0.25s”, transform: wsChores ? “translateX(20px)” : “translateX(0)” }} />
+</button>
+</div>
+<Btn onClick={() => { if (!wsName.trim()) return; addChild({ id: uid(), name: wsName.trim(), color: wsColor, photo: wsPhoto, buckets: [], transactions: [], recurring: [], choresEnabled: wsChores }); setWsOpen(false); }} disabled={!wsName.trim()} full color=”#007AFF”><Plus size={16} /> Add Child</Btn>
+</Modal>
+{wsShowCropper && wsRawPhoto && (
+<ImageCropper src={wsRawPhoto} onCrop={(cropped) => { setWsPhoto(cropped); setWsShowCropper(false); setWsRawPhoto(null); }} onCancel={() => { setWsShowCropper(false); setWsRawPhoto(null); }} />
+)}
+</div>
+);
+}
+
+return <AccountScreen child={sel} allChildren={data.children} onBack={() => {}} onSelectChild={setActive} onAddChild={addChild} onUpdate={u => setData(p => ({ …p, children: p.children.map(c => c.id === u.id ? u : c) }))} onDelete={del} dark={dark} onToggleDark={toggleDark} onExport={exportData} onImport={importData} />;
+}
+
+import { createRoot } from “react-dom/client”;
+createRoot(document.getElementById(“root”)).render(<KiddoBank />);
+</script>
+
+</body>
+</html>
