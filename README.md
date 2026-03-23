@@ -1,0 +1,2 @@
+# kiddobank
+Family finance tracker
